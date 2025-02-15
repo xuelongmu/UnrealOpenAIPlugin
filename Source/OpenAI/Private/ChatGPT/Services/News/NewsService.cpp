@@ -185,7 +185,7 @@ void UNewsService::OnRequestCompleted(FHttpRequestPtr Request, FHttpResponsePtr 
             if (Index > News::MaxNewsAmount) return;
         });
 
-    ServiceDataRecieved.Broadcast(MakeMessage(NewsCombined));
+    ServiceDataReceived.Broadcast(MakeMessage(NewsCombined));
 }
 
 void UNewsService::SendError(const FString& ErrorMessage)

@@ -62,9 +62,9 @@ FMessage UBaseService::MakeMessage(const FString& Content) const
     return Message;
 }
 
-FOnServiceDataRecieved& UBaseService::OnServiceDataRecieved()
+FOnServiceDataReceived& UBaseService::OnServiceDataReceived()
 {
-    return ServiceDataRecieved;
+    return ServiceDataReceived;
 }
 
 FOnServiceDataError& UBaseService::OnServiceDataError()

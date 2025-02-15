@@ -164,7 +164,7 @@ void UWeatherService::OnRequestCompleted(FHttpRequestPtr Request, FHttpResponseP
 
     const FString Content = FString::Format(TEXT("location:{0}, temperature:{1}, descriptions:{2}"),  //
         {Weather.Location.Name, Weather.Current.Temperature, FullDescription});
-    ServiceDataRecieved.Broadcast(MakeMessage(Content));
+    ServiceDataReceived.Broadcast(MakeMessage(Content));
 }
 
 void UWeatherService::SendError(const FString& ErrorMessage)

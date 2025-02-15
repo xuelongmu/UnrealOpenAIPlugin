@@ -183,7 +183,7 @@ bool UChatGPT::RegisterService(const TSubclassOf<UBaseService>& ServiceClass, co
         UE_LOG(LogChatGPT, Error, TEXT("%s"), *LogMsg);
         return false;
     }
-    Service->OnServiceDataRecieved().AddLambda(
+    Service->OnServiceDataReceived().AddLambda(
         [&](const FMessage& Message)
         {
             ChatHistory.Add(Message);
@@ -207,7 +207,7 @@ void UChatGPT::UnRegisterService(const TSubclassOf<UBaseService>& ServiceClass)
     auto* FoundService = Services.FindByPredicate([ServiceClass](const auto& Item) { return Item && Item->IsA(ServiceClass); });
     if (FoundService)
     {
-        FoundService->Get()->OnServiceDataRecieved().RemoveAll(this);
+        FoundService->Get()->OnServiceDataReceived().RemoveAll(this);
         FoundService->Get()->OnServiceDataError().RemoveAll(this);
         Services.Remove(FoundService->Get());
         const auto LogMsg = FString::Format(TEXT("Service {0} was unregistered"), {FoundService->Get()->Name()});

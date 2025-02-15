@@ -104,5 +104,5 @@ void UQuestService::Call(const TSharedPtr<FJsonObject>& Args, const FString& InT
         InfoToOpenAI = "Character with such a name doesn't exist in the game.";
     }
 
-    ServiceDataRecieved.Broadcast(MakeMessage(InfoToOpenAI));
+    ServiceDataReceived.Broadcast(MakeMessage(InfoToOpenAI));
 }

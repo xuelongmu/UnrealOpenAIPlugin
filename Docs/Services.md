@@ -323,14 +323,14 @@ void UQuestService::Call(const TSharedPtr<FJsonObject>& ArgsJson, const FString&
 {
 ...
     const FMessage Message = MakeMessage(InfoToOpenAI);
-    ServiceDataRecieved.Broadcast(Message);
+    ServiceDataReceived.Broadcast(Message);
 }
 ```
 
 The main field of the structure `FMessage` is `Content`, into which any information that
 will be analyzed by the `ChatGPT` and it will write a response based on it.
 
-The `ServiceDataRecieved` is a delegate from the base class `UBaseService` which notifies the plugin that we can send data to the `ChatGPT`.
+The `ServiceDataReceived` is a delegate from the base class `UBaseService` which notifies the plugin that we can send data to the `ChatGPT`.
 
 The full listing of the `UQuestService::Call` is following:
 
@@ -374,7 +374,7 @@ void UQuestService::Call(const TSharedPtr<FJsonObject>& ArgsJson, const FString&
     }
 
     const FMessage Message = MakeMessage(InfoToOpenAI);
-    ServiceDataRecieved.Broadcast(Message);
+    ServiceDataReceived.Broadcast(Message);
 }
 ```
 
@@ -565,6 +565,6 @@ void UQuestService::Call(const TSharedPtr<FJsonObject>& ArgsJson, const FString&
     }
 
     const FMessage Message = MakeMessage(InfoToOpenAI);
-    ServiceDataRecieved.Broadcast(Message);
+    ServiceDataReceived.Broadcast(Message);
 }
 ```

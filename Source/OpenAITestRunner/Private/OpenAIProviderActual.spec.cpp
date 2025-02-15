@@ -49,12 +49,12 @@ void TestImageResponse(FAutomationTestBase* Test, const TArray<FImageObject>& Da
 
 bool TestFinishReason(const FString& Reason)
 {
-    const TSet<FString> FinishReson{UOpenAIFuncLib::OpenAIFinishReasonToString(EOpenAIFinishReason::Stop),
+    const TSet<FString> FinishReason{UOpenAIFuncLib::OpenAIFinishReasonToString(EOpenAIFinishReason::Stop),
         UOpenAIFuncLib::OpenAIFinishReasonToString(EOpenAIFinishReason::Length),
         UOpenAIFuncLib::OpenAIFinishReasonToString(EOpenAIFinishReason::Tool_Calls),
         UOpenAIFuncLib::OpenAIFinishReasonToString(EOpenAIFinishReason::Content_Filter),
         UOpenAIFuncLib::OpenAIFinishReasonToString(EOpenAIFinishReason::Null)};
-    return FinishReson.Contains(Reason);
+    return FinishReason.Contains(Reason);
 }
 
 template <typename ResponseType>

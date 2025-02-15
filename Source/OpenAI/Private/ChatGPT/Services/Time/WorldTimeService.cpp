@@ -98,5 +98,5 @@ void UWorldTimeService::OnRequestCompleted(FHttpRequestPtr Request, FHttpRespons
     const FString InfoToOpenAI = FString::Format(TEXT("DateTime: {0}, Timezone: {1}"), {WorldTime.DateTime, WorldTime.TimeZone});
     UE_LOG(LogWorldTimeService, Display, TEXT("InfoToOpenAI: %s"), *InfoToOpenAI);
 
-    ServiceDataRecieved.Broadcast(MakeMessage(InfoToOpenAI));
+    ServiceDataReceived.Broadcast(MakeMessage(InfoToOpenAI));
 }

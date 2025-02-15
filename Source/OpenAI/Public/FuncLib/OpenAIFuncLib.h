@@ -90,7 +90,7 @@ public:
     static ERole StringToOpenAIRole(const FString& Role);
 
     /**
-      File content consits of two lines:
+      File content consists of two lines:
       APIKey=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
       OrganizationID=org-xxxxxxxxxxxxxxxxxxxxxx
       ProjectID=proj_xxxxxxxxxxxxxxxxxxxxxx
@@ -159,7 +159,7 @@ public:
     static FString MakeURLWithQuery(const FString& URL, const OpenAI::QueryPairs& Args);
 
 public:
-    // helpers for OpeanAI 'functions'
+    // helpers for OpenAI 'functions'
     static FString MakeFunctionsString(const TSharedPtr<FJsonObject>& Json);
     static FString CleanUpFunctionsObject(const FString& Input);
 

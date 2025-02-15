@@ -8,7 +8,7 @@
 #include "Dom/JsonObject.h"
 #include "BaseService.generated.h"
 
-DECLARE_MULTICAST_DELEGATE_OneParam(FOnServiceDataRecieved, const FMessage&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnServiceDataReceived, const FMessage&);
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnServiceDataError, const FString&);
 
 UCLASS()
@@ -52,14 +52,14 @@ public:
     */
     virtual FString TooltipDescription() const;
 
-    FOnServiceDataRecieved& OnServiceDataRecieved();
+    FOnServiceDataReceived& OnServiceDataReceived();
     FOnServiceDataError& OnServiceDataError();
 
 protected:
     /*
       Call this delegate with a data that returns your function.
     */
-    FOnServiceDataRecieved ServiceDataRecieved;
+    FOnServiceDataReceived ServiceDataReceived;
 
     /*
       Call this delegate when an error occurs during your function calculations.
