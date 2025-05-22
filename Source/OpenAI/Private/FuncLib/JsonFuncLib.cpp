@@ -149,8 +149,12 @@ void UJsonFuncLib::RemoveOptionalValuesInJsonObject(const TSharedPtr<FJsonObject
     {
         // Handle objects
         const TSharedPtr<FJsonObject>* FieldObject = nullptr;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4
         const bool IsObject = JsonObject->TryGetObjectField(FStringView(FieldName), FieldObject);
-
+#else
+        const bool IsObject = JsonObject->TryGetObjectField(FieldName, FieldObject);
+#endif
+        
         if (IsObject && FieldObject->IsValid())
         {
             if (FieldObject->Get()->HasField(TEXT("isset")))
@@ -174,8 +178,12 @@ void UJsonFuncLib::RemoveOptionalValuesInJsonObject(const TSharedPtr<FJsonObject
 
         // Handle arrays
         const TArray<TSharedPtr<FJsonValue>>* FieldArray = nullptr;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4
         const bool IsArray = JsonObject->TryGetArrayField(FStringView(FieldName), FieldArray);
-
+#else
+        const bool IsArray = JsonObject->TryGetArrayField(FieldName, FieldArray);
+#endif
+        
         if (IsArray && FieldArray)
         {
             for (const auto& Element : *FieldArray)

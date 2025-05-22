@@ -61,7 +61,11 @@ void UOpenAIProvider::CreateCompletion(const FCompletion& Completion, const FOpe
     if (Completion.Stream)
     {
         HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnCreateCompletionStreamCompleted);
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4
         HttpRequest->OnRequestProgress64().BindUObject(this, &ThisClass::OnCreateCompletionStreamProgress);
+#else
+        HttpRequest->OnRequestProgress().BindUObject(this, &ThisClass::OnCreateCompletionStreamProgress);
+#endif
     }
     else
     {
@@ -80,7 +84,11 @@ void UOpenAIProvider::CreateChatCompletion(const FChatCompletion& ChatCompletion
     if (ChatCompletion.Stream)
     {
         HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnCreateChatCompletionStreamCompleted);
-        HttpRequest->OnRequestProgress64().BindUObject(this, &ThisClass::OnCreateChatCompletionStreamProgress);
+        #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4
+HttpRequest->OnRequestProgress64().BindUObject(this, &ThisClass::OnCreateChatCompletionStreamProgress);
+#else
+HttpRequest->OnRequestProgress().BindUObject(this, &ThisClass::OnCreateChatCompletionStreamProgress);
+#endif
     }
     else
     {
@@ -96,7 +104,9 @@ void UOpenAIProvider::CreateImage(const FOpenAIImage& Image, const FOpenAIAuth& 
     auto HttpRequest = MakeRequest(Image, API->ImageGenerations(), "POST", Auth);
     // @todo: make this an API parameter
     const float timeoutSeconds = 60.0f * 5.0f;  // 5 mins
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4
     HttpRequest->SetActivityTimeout(timeoutSeconds);
+#endif
     HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnCreateImageCompleted);
     ProcessRequest(HttpRequest);
 }
@@ -472,7 +482,11 @@ void UOpenAIProvider::OnCreateCompletionStreamCompleted(FHttpRequestPtr Request,
     OnStreamCompleted<FCompletionStreamResponse>(Request, Response, WasSuccessful, CreateCompletionStreamCompleted);
 }
 
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4
 void UOpenAIProvider::OnCreateCompletionStreamProgress(FHttpRequestPtr Request, uint64 BytesSent, uint64 BytesReceived)
+#else
+void UOpenAIProvider::OnCreateCompletionStreamProgress(FHttpRequestPtr Request, int32 BytesSent, int32 BytesReceived)
+#endif
 {
     OnStreamProgress<FCompletionStreamResponse>(Request, BytesSent, BytesReceived, CreateCompletionStreamProgresses);
 }
@@ -487,7 +501,11 @@ void UOpenAIProvider::OnCreateChatCompletionStreamCompleted(FHttpRequestPtr Requ
     OnStreamCompleted<FChatCompletionStreamResponse>(Request, Response, WasSuccessful, CreateChatCompletionStreamCompleted);
 }
 
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4
 void UOpenAIProvider::OnCreateChatCompletionStreamProgress(FHttpRequestPtr Request, uint64 BytesSent, uint64 BytesReceived)
+#else
+void UOpenAIProvider::OnCreateChatCompletionStreamProgress(FHttpRequestPtr Request, int32 BytesSent, int32 BytesReceived)
+#endif
 {
     OnStreamProgress<FChatCompletionStreamResponse>(Request, BytesSent, BytesReceived, CreateChatCompletionStreamProgresses);
 }
@@ -843,7 +861,11 @@ FHttpRequestRef UOpenAIProvider::MakeRequestHeaders(const FOpenAIAuth& Auth) con
 FOpenAIResponseMetadata UOpenAIProvider::GetResponseHeaders(FHttpResponsePtr Response) const
 {
     FOpenAIResponseMetadata Metadata;
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4
     if (Response.IsValid() && Response->GetStatus() != EHttpRequestStatus::Processing)
+#else
+    if (Response.IsValid())
+#endif
     {
         Metadata.HttpHeaders = Response->GetAllHeaders();
     }

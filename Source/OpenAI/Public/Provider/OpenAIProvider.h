@@ -349,8 +349,12 @@ private:
     FOnRequestError RequestError;
 
 #define DECLARE_HTTP_CALLBACK(Callback) virtual void Callback(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4
 #define DECLARE_HTTP_CALLBACK_PROGRESS(Callback) virtual void Callback(FHttpRequestPtr Request, uint64 BytesSent, uint64 BytesReceived);
-
+#else
+#define DECLARE_HTTP_CALLBACK_PROGRESS(Callback) virtual void Callback(FHttpRequestPtr Request, int32 BytesSent, int32 BytesReceived);
+#endif
+    
     DECLARE_HTTP_CALLBACK(OnListModelsCompleted)
     DECLARE_HTTP_CALLBACK(OnRetrieveModelCompleted)
     DECLARE_HTTP_CALLBACK(OnCreateCompletionCompleted)

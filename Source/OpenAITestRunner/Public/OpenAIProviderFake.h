@@ -6,11 +6,28 @@
 #include "Provider/OpenAIProvider.h"
 #include "OpenAIProviderFake.generated.h"
 
+// COPIED FROM IHttpBase from 5.4 for backwards compatibility
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 4
+enum class EHttpFailureReason : uint8
+{
+    None = 0,
+    ConnectionError,
+    Cancelled,
+    // This acts differently than the platform timeout. It's the time out of the entire request including
+    // retries, which configured by the user. The platform timeout has different meanings/APIs on different
+    // platforms, such as resolve host timeout, connect timeout, send timeout, receive timeout, entire
+    // request timeout etc. It's not practical to unify to same behavior between them through their APIs.
+    // When user's configured time is up, it's TimedOut no matter which step this Http request is in.
+    TimedOut,
+    Other
+};
+#endif
+
 class FFakeHttpResponse : public IHttpResponse
 {
 public:
     FFakeHttpResponse(const FString& ResponseStr) : ReponseData(ResponseStr) {}
-    virtual int32 GetResponseCode() const override { return static_cast<int32>(EHttpResponseCodes::Ok); }
+    virtual int32 GetResponseCode() const override { return EHttpResponseCodes::Ok; }
     virtual FString GetContentAsString() const override { return ReponseData; }
     virtual FString GetURL() const override { return FString(); }
     virtual FString GetURLParameter(const FString& ParameterName) const override { return FString(); }
@@ -23,10 +40,11 @@ public:
         static TArray<uint8> None;
         return None;
     }
-    virtual const FString& GetEffectiveURL() const override { return EffectiveURL; }
-    virtual EHttpRequestStatus::Type GetStatus() const override { return EHttpRequestStatus::Type::Succeeded; }
-    virtual EHttpFailureReason GetFailureReason() const override { return EHttpFailureReason::None; }
-
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4
+    // virtual const FString& GetEffectiveURL() const override { return EffectiveURL; }
+    // virtual EHttpRequestStatus::Type GetStatus() const override { return EHttpRequestStatus::Type::Succeeded; }
+    // virtual EHttpFailureReason GetFailureReason() const override { return EHttpFailureReason::None; }
+#endif
 private:
     FString ReponseData;
     FString EffectiveURL;
@@ -68,8 +86,12 @@ public:
     }
     virtual FHttpRequestCompleteDelegate& OnProcessRequestComplete() override { return HttpRequestCompleteDelegate; }
     virtual FHttpRequestHeaderReceivedDelegate& OnHeaderReceived() override { return HttpHeaderReceivedDelegate; }
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4
     virtual FHttpRequestProgressDelegate64& OnRequestProgress64() override { return HttpRequestProgressDelegate64; }
     virtual FHttpRequestStatusCodeReceivedDelegate& OnStatusCodeReceived() override { return HttpRequestStatusCodeReceivedDelegate; }
+#else
+    virtual FHttpRequestProgressDelegate& OnRequestProgress() override { return HttpRequestProgressDelegate; }
+#endif
     virtual void CancelRequest() override {}
     virtual EHttpRequestStatus::Type GetStatus() const override { return EHttpRequestStatus::Type::NotStarted; }
     virtual const FHttpResponsePtr GetResponse() const override { return MakeShareable(new FFakeHttpResponse(ReponseData)); }
@@ -81,6 +103,8 @@ public:
     {
         return EHttpRequestDelegateThreadPolicy::CompleteOnGameThread;
     }
+
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4
     virtual const FString& GetEffectiveURL() const override { return EffectiveURL; }
     virtual EHttpFailureReason GetFailureReason() const override { return EHttpFailureReason::None; }
     virtual void ProcessRequestUntilComplete() override {}
@@ -88,14 +112,15 @@ public:
     virtual FString GetOption(const FName Option) const override { return {}; }
     virtual void SetOption(const FName Option, const FString& OptionValue) override {}
     virtual void ResetTimeoutStatus() override {}
+#endif
 
-public:
     FHttpRequestProgressDelegate HttpRequestProgressDelegate;
-    FHttpRequestProgressDelegate64 HttpRequestProgressDelegate64;
+    // Disabled for backwards compatibility
+    // FHttpRequestProgressDelegate64 HttpRequestProgressDelegate64;
     FHttpRequestCompleteDelegate HttpRequestCompleteDelegate;
     FHttpRequestHeaderReceivedDelegate HttpHeaderReceivedDelegate;
     FHttpRequestWillRetryDelegate HttpRequestWillRetryDelegate;
-    FHttpRequestStatusCodeReceivedDelegate HttpRequestStatusCodeReceivedDelegate;
+    // FHttpRequestStatusCodeReceivedDelegate HttpRequestStatusCodeReceivedDelegate;
 
 private:
     FString ReponseData;
