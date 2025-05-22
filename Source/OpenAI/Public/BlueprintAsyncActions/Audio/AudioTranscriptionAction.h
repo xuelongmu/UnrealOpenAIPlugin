@@ -4,10 +4,11 @@
 
 #include "Kismet/BlueprintAsyncActionBase.h"
 #include "Provider/Types/AudioTypes.h"
+#include "Provider/Types/CommonTypes.h"
 #include "AudioTranscriptionAction.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
-    FOnAudioTranscription, const FAudioTranscriptionResponse&, Response, const FOpenAIError&, RawError);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnAudioTranscription, const FAudioTranscriptionResponse&, Response,
+    const FOpenAIResponseMetadata&, ResponseMetadata, const FOpenAIError&, RawError);
 
 class UOpenAIProvider;
 
@@ -33,7 +34,7 @@ private:
 
     void TryToOverrideURL();
 
-    void OnCreateAudioTranscriptionCompleted(const FAudioTranscriptionResponse& Response);
+    void OnCreateAudioTranscriptionCompleted(const FAudioTranscriptionResponse& Response, const FOpenAIResponseMetadata& ResponseMetadata);
     void OnRequestError(const FString& URL, const FString& Content);
 
 private:

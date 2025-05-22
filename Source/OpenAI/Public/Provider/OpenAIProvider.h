@@ -1,14 +1,36 @@
 // OpenAI, Copyright LifeEXE. All Rights Reserved.
 
+/*
+ ___       ___  ________ _______
+|\  \     |\  \|\  _____\\  ___ \
+\ \  \    \ \  \ \  \__/\ \   __/|
+ \ \  \    \ \  \ \   __\\ \  \_|/__
+  \ \  \____\ \  \ \  \_| \ \  \_|\ \
+   \ \_______\ \__\ \__\   \ \_______\
+    \|_______|\|__|\|__|    \|_______|
+
+
+
+ _______      ___    ___ _______
+|\  ___ \    |\  \  /  /|\  ___ \
+\ \   __/|   \ \  \/  / | \   __/|
+ \ \  \_|/__  \ \    / / \ \  \_|/__
+  \ \  \_|\ \  /     \/   \ \  \_|\ \
+   \ \_______\/  /\   \    \ \_______\
+    \|_______/__/ /\ __\    \|_______|
+             |__|/ \|__|
+*/
+
 #pragma once
 
 #include "CoreMinimal.h"
 #include "HTTP.h"
-#include "ResponseTypes.h"
-#include "RequestTypes.h"
-#include "Types/AudioTypes.h"
 #include "Delegates.h"
+#include "Types/AllTypesHeader.h"
 #include "FuncLib/OpenAIFuncLib.h"
+#include "FuncLib/JsonFuncLib.h"
+#include "Provider/JsonParsers/ChatParser.h"
+#include "JsonObjectConverter.h"
 #include "OpenAIProvider.generated.h"
 
 class FJsonObject;
@@ -40,6 +62,12 @@ public:
       https://platform.openai.com/docs/api-reference/models/retrieve
     */
     void RetrieveModel(const FString& ModelName, const FOpenAIAuth& Auth);
+
+    /**
+      Delete a fine-tuned model. You must have the Owner role in your organization.
+      https://platform.openai.com/docs/api-reference/models/delete
+    */
+    void DeleteFineTunedModel(const FString& ModelID, const FOpenAIAuth& Auth);
 
     /**
       Creates a completion for the provided prompt and parameters.
@@ -128,16 +156,17 @@ public:
     void RetrieveFileContent(const FString& FileID, const FOpenAIAuth& Auth);
 
     /**
-      Delete a fine-tuned model. You must have the Owner role in your organization.
-      https://platform.openai.com/docs/api-reference/fine-tunes/delete-model
-    */
-    void DeleteFineTunedModel(const FString& ModelID, const FOpenAIAuth& Auth);
-
-    /**
       Classifies if text violates OpenAI's Content Policy
       https://platform.openai.com/docs/api-reference/moderations/create
     */
     void CreateModerations(const FModerations& Moderations, const FOpenAIAuth& Auth);
+
+    /**
+      Creates a job that fine-tunes a specified model from a given dataset.
+      Response includes details of the enqueued job including job status and the name of the fine-tuned models once complete.
+      https://platform.openai.com/docs/api-reference/fine-tuning/create
+    */
+    void CreateFineTuningJob(const FFineTuningJob& FineTuningJob, const FOpenAIAuth& Auth);
 
     /**
       List your organization's fine-tuning jobs.
@@ -146,11 +175,18 @@ public:
     void ListFineTuningJobs(const FOpenAIAuth& Auth, const FFineTuningQueryParameters& FineTuningQueryParameters = {});
 
     /**
-      Creates a job that fine-tunes a specified model from a given dataset.
-      Response includes details of the enqueued job including job status and the name of the fine-tuned models once complete.
-      https://platform.openai.com/docs/api-reference/fine-tuning/create
+      Get status updates for a fine-tuning job.
+      https://platform.openai.com/docs/api-reference/fine-tuning/list-events
     */
-    void CreateFineTuningJob(const FFineTuningJob& FineTuningJob, const FOpenAIAuth& Auth);
+    void ListFineTuningEvents(
+        const FString& FineTuningJobID, const FOpenAIAuth& Auth, const FFineTuningQueryParameters& FineTuningQueryParameters = {});
+
+    /**
+      Get status updates for a fine-tuning job.
+      https://platform.openai.com/docs/api-reference/fine-tuning/list-events
+    */
+    void ListFineTuningCheckpoints(
+        const FString& FineTuningJobID, const FOpenAIAuth& Auth, const FFineTuningQueryParameters& FineTuningQueryParameters = {});
 
     /**
       Get info about a fine-tuning job.
@@ -165,138 +201,232 @@ public:
     void CancelFineTuningJob(const FString& FineTuneID, const FOpenAIAuth& Auth);
 
     /**
-      Get status updates for a fine-tuning job.
-      https://platform.openai.com/docs/api-reference/fine-tuning/list-events
+      Create large batches of API requests for asynchronous processing.
+      The Batch API returns completions within 24 hours for a 50% discount.
+      https://platform.openai.com/docs/api-reference/batch/create
     */
-    void ListFineTuningEvents(
-        const FString& FineTuningJobID, const FOpenAIAuth& Auth, const FFineTuningQueryParameters& FineTuningQueryParameters = {});
+    void CreateBatch(const FCreateBatch& CreateBatch, const FOpenAIAuth& Auth);
+
+    /**
+      Retrieves a batch.
+      https://platform.openai.com/docs/api-reference/batch/retrieve
+    */
+    void RetrieveBatch(const FString& BatchId, const FOpenAIAuth& Auth);
+
+    /**
+      Cancels an in-progress batch.
+      The batch will be in status cancelling for up to 10 minutes,
+      before changing to cancelled, where it will have partial
+      results (if any) available in the output file.
+      https://platform.openai.com/docs/api-reference/batch/cancel
+    */
+    void CancelBatch(const FString& BatchId, const FOpenAIAuth& Auth);
+
+    /**
+      List your organization's batches.
+      https://platform.openai.com/docs/api-reference/batch/list
+    */
+    void ListBatch(const FListBatch& ListBatch, const FOpenAIAuth& Auth);
+
+    /**
+      Creates an intermediate Upload object that you can add Parts to.
+      Currently, an Upload can accept at most 8 GB in total and expires after an hour after you create it.
+      https://platform.openai.com/docs/api-reference/uploads/create
+    */
+    void CreateUpload(const FCreateUpload& CreateUpload, const FOpenAIAuth& Auth);
+
+    /**
+      Adds a Part to an Upload object.
+      A Part represents a chunk of bytes from the file you are trying to upload.
+      https://platform.openai.com/docs/api-reference/uploads/add-part
+    */
+    void AddUploadPart(const FString& UploadId, const FAddUploadPart& AddUploadPart, const FOpenAIAuth& Auth);
+
+    /**
+      Completes the Upload.
+      Within the returned Upload object, there is a nested File object
+      that is ready to use in the rest of the platform.
+      https://platform.openai.com/docs/api-reference/uploads/complete
+    */
+    void CompleteUpload(const FString& UploadId, const FCompleteUpload& CompleteUpload, const FOpenAIAuth& Auth);
+
+    /**
+      Cancels the Upload. No Parts may be added after an Upload is cancelled.
+      https://platform.openai.com/docs/api-reference/uploads/cancel
+    */
+    void CancelUpload(const FString& UploadId, const FOpenAIAuth& Auth);
+
+    /**
+      Create an assistant with a model and instructions.
+      https://platform.openai.com/docs/api-reference/assistants/createAssistant
+    */
+    void CreateAssistant(const FCreateAssistant& CreateAssistant, const FOpenAIAuth& Auth);
+
+    /**
+      Returns a list of assistants.
+      https://platform.openai.com/docs/api-reference/assistants/listAssistants
+    */
+    void ListAssistants(const FListAssistants& ListAssistants, const FOpenAIAuth& Auth);
+
+    /**
+      Retrieves an assistant.
+      https://platform.openai.com/docs/api-reference/assistants/getAssistant
+    */
+    void RetrieveAssistant(const FString& AssistantId, const FOpenAIAuth& Auth);
+
+    /**
+      Modifies an assistant.
+      https://platform.openai.com/docs/api-reference/assistants/modifyAssistant
+    */
+    void ModifyAssistant(const FString& AssistantId, const FModifyAssistant& ModifyAssistant, const FOpenAIAuth& Auth);
+
+    /**
+      Delete an assistant.
+      https://platform.openai.com/docs/api-reference/assistants/deleteAssistant
+    */
+    void DeleteAssistant(const FString& AssistantId, const FOpenAIAuth& Auth);
 
     /**
       Print response to console
     */
     void SetLogEnabled(bool LogEnabled) { bLogEnabled = LogEnabled; }
 
+#define DEFINE_EVENT_GETTER(Name)          \
+public:                                    \
+    FOn##Name& On##Name() { return Name; } \
+                                           \
+private:                                   \
+    FOn##Name Name;
+
 public:
     FOnRequestError& OnRequestError() { return RequestError; };
-    FOnListModelsCompleted& OnListModelsCompleted() { return ListModelsCompleted; }
-    FOnRetrieveModelCompleted& OnRetrieveModelCompleted() { return RetrieveModelCompleted; }
-    FOnCreateCompletionCompleted& OnCreateCompletionCompleted() { return CreateCompletionCompleted; }
-    FOnCreateCompletionStreamCompleted& OnCreateCompletionStreamCompleted() { return CreateCompletionStreamCompleted; }
-    FOnCreateCompletionStreamProgresses& OnCreateCompletionStreamProgresses() { return CreateCompletionStreamProgresses; }
-    FOnCreateChatCompletionCompleted& OnCreateChatCompletionCompleted() { return CreateChatCompletionCompleted; }
-    FOnCreateChatCompletionStreamCompleted& OnCreateChatCompletionStreamCompleted() { return CreateChatCompletionStreamCompleted; }
-    FOnCreateChatCompletionStreamCompleted& OnCreateChatCompletionStreamProgresses() { return CreateChatCompletionStreamProgresses; }
-    FOnCreateImageCompleted& OnCreateImageCompleted() { return CreateImageCompleted; }
-    FOnCreateImageEditCompleted& OnCreateImageEditCompleted() { return CreateImageEditCompleted; }
-    FOnCreateImageVariationCompleted& OnCreateImageVariationCompleted() { return CreateImageVariationCompleted; }
-    FOnCreateEmbeddingsCompleted& OnCreateEmbeddingsCompleted() { return CreateEmbeddingsCompleted; }
-    FOnCreateSpeechCompleted& OnCreateSpeechCompleted() { return CreateSpeechCompleted; }
-    FOnCreateAudioTranscriptionCompleted& OnCreateAudioTranscriptionCompleted() { return CreateAudioTranscriptionCompleted; }
-    FOnCreateAudioTranslationCompleted& OnCreateAudioTranslationCompleted() { return CreateAudioTranslationCompleted; }
-    FOnListFilesCompleted& OnListFilesCompleted() { return ListFilesCompleted; }
-    FOnUploadFileCompleted& OnUploadFileCompleted() { return UploadFileCompleted; }
-    FOnDeleteFileCompleted& OnDeleteFileCompleted() { return DeleteFileCompleted; }
-    FOnRetrieveFileCompleted& OnRetrieveFileCompleted() { return RetrieveFileCompleted; }
-    FOnRetrieveFileContentCompleted& OnRetrieveFileContentCompleted() { return RetrieveFileContentCompleted; }
-    FOnListFineTuneEventsCompleted& OnListFineTuneEventsCompleted() { return ListFineTuneEventsCompleted; }
-    FOnDeleteFineTunedModelCompleted& OnDeleteFineTunedModelCompleted() { return DeleteFineTunedModelCompleted; }
-    FOnCreateModerationsCompleted& OnCreateModerationsCompleted() { return CreateModerationsCompleted; }
-    FOnListFineTuningJobsCompleted& OnListFineTuningJobsCompleted() { return ListFineTuningJobsCompleted; }
-    FOnCreateFineTuningJobCompleted& OnCreateFineTuningJobCompleted() { return CreateFineTuningJobCompleted; }
-    FOnRetrieveFineTuningJobCompleted& OnRetrieveFineTuningJobCompleted() { return RetrieveFineTuningJobCompleted; }
-    FOnCancelFineTuningJobCompleted& OnCancelFineTuningJobCompleted() { return CancelFineTuningJobCompleted; }
-    FOnListFineTuningEventsCompleted& OnListFineTuningEventsCompleted() { return ListFineTuningEventsCompleted; }
+    DEFINE_EVENT_GETTER(ListModelsCompleted)
+    DEFINE_EVENT_GETTER(RetrieveModelCompleted)
+    DEFINE_EVENT_GETTER(CreateCompletionCompleted)
+    DEFINE_EVENT_GETTER(CreateCompletionStreamCompleted)
+    DEFINE_EVENT_GETTER(CreateCompletionStreamProgresses)
+    DEFINE_EVENT_GETTER(CreateChatCompletionCompleted)
+    DEFINE_EVENT_GETTER(CreateChatCompletionStreamCompleted)
+    DEFINE_EVENT_GETTER(CreateChatCompletionStreamProgresses)
+    DEFINE_EVENT_GETTER(CreateImageCompleted)
+    DEFINE_EVENT_GETTER(CreateImageEditCompleted)
+    DEFINE_EVENT_GETTER(CreateImageVariationCompleted)
+    DEFINE_EVENT_GETTER(CreateEmbeddingsCompleted)
+    DEFINE_EVENT_GETTER(CreateSpeechCompleted)
+    DEFINE_EVENT_GETTER(CreateAudioTranscriptionCompleted)
+    DEFINE_EVENT_GETTER(CreateAudioTranscriptionVerboseCompleted)
+    DEFINE_EVENT_GETTER(CreateAudioTranslationCompleted)
+    DEFINE_EVENT_GETTER(ListFilesCompleted)
+    DEFINE_EVENT_GETTER(UploadFileCompleted)
+    DEFINE_EVENT_GETTER(DeleteFileCompleted)
+    DEFINE_EVENT_GETTER(RetrieveFileCompleted)
+    DEFINE_EVENT_GETTER(RetrieveFileContentCompleted)
+    DEFINE_EVENT_GETTER(CreateFineTuningJobCompleted)
+    DEFINE_EVENT_GETTER(ListFineTuningJobsCompleted)
+    DEFINE_EVENT_GETTER(ListFineTuningEventsCompleted)
+    DEFINE_EVENT_GETTER(ListFineTuningCheckpointsCompleted)
+    DEFINE_EVENT_GETTER(DeleteFineTunedModelCompleted)
+    DEFINE_EVENT_GETTER(CreateModerationsCompleted)
+    DEFINE_EVENT_GETTER(RetrieveFineTuningJobCompleted)
+    DEFINE_EVENT_GETTER(CancelFineTuningJobCompleted)
+    DEFINE_EVENT_GETTER(ListBatchCompleted)
+    DEFINE_EVENT_GETTER(CreateBatchCompleted)
+    DEFINE_EVENT_GETTER(RetrieveBatchCompleted)
+    DEFINE_EVENT_GETTER(CancelBatchCompleted)
+    DEFINE_EVENT_GETTER(CreateUploadCompleted)
+    DEFINE_EVENT_GETTER(AddUploadPartCompleted)
+    DEFINE_EVENT_GETTER(CompleteUploadCompleted)
+    DEFINE_EVENT_GETTER(CancelUploadCompleted)
+    DEFINE_EVENT_GETTER(CreateAssistantCompleted)
+    DEFINE_EVENT_GETTER(ListAssistantsCompleted)
+    DEFINE_EVENT_GETTER(RetrieveAssistantCompleted)
+    DEFINE_EVENT_GETTER(ModifyAssistantCompleted)
+    DEFINE_EVENT_GETTER(DeleteAssistantCompleted)
 
 private:
     TSharedPtr<OpenAI::IAPI> API;
     bool bLogEnabled{true};
-
     FOnRequestError RequestError;
-    FOnListModelsCompleted ListModelsCompleted;
-    FOnRetrieveModelCompleted RetrieveModelCompleted;
-    FOnCreateCompletionCompleted CreateCompletionCompleted;
-    FOnCreateCompletionStreamCompleted CreateCompletionStreamCompleted;
-    FOnCreateCompletionStreamProgresses CreateCompletionStreamProgresses;
-    FOnCreateChatCompletionCompleted CreateChatCompletionCompleted;
-    FOnCreateChatCompletionStreamCompleted CreateChatCompletionStreamCompleted;
-    FOnCreateChatCompletionStreamProgresses CreateChatCompletionStreamProgresses;
-    FOnCreateImageCompleted CreateImageCompleted;
-    FOnCreateImageEditCompleted CreateImageEditCompleted;
-    FOnCreateImageVariationCompleted CreateImageVariationCompleted;
-    FOnCreateEmbeddingsCompleted CreateEmbeddingsCompleted;
-    FOnCreateSpeechCompleted CreateSpeechCompleted;
-    FOnCreateAudioTranscriptionCompleted CreateAudioTranscriptionCompleted;
-    FOnCreateAudioTranslationCompleted CreateAudioTranslationCompleted;
-    FOnListFilesCompleted ListFilesCompleted;
-    FOnUploadFileCompleted UploadFileCompleted;
-    FOnDeleteFileCompleted DeleteFileCompleted;
-    FOnRetrieveFileCompleted RetrieveFileCompleted;
-    FOnRetrieveFileContentCompleted RetrieveFileContentCompleted;
-    FOnListFineTuneEventsCompleted ListFineTuneEventsCompleted;
-    FOnDeleteFineTunedModelCompleted DeleteFineTunedModelCompleted;
-    FOnCreateModerationsCompleted CreateModerationsCompleted;
-    FOnListFineTuningJobsCompleted ListFineTuningJobsCompleted;
-    FOnCreateFineTuningJobCompleted CreateFineTuningJobCompleted;
-    FOnRetrieveFineTuningJobCompleted RetrieveFineTuningJobCompleted;
-    FOnCancelFineTuningJobCompleted CancelFineTuningJobCompleted;
-    FOnListFineTuningEventsCompleted ListFineTuningEventsCompleted;
 
-    virtual void OnListModelsCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnRetrieveModelCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnCreateCompletionCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnCreateCompletionStreamCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnCreateCompletionStreamProgress(FHttpRequestPtr Request, int32 BytesSent, int32 BytesReceived);
-    virtual void OnCreateChatCompletionCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnCreateChatCompletionStreamCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnCreateChatCompletionStreamProgress(FHttpRequestPtr Request, int32 BytesSent, int32 BytesReceived);
-    virtual void OnCreateImageCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnCreateImageEditCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnCreateImageVariationCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnCreateEmbeddingsCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnCreateSpeechCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnCreateAudioTranscriptionCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnCreateAudioTranslationCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnListFilesCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnUploadFileCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnDeleteFileCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnRetrieveFileCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnRetrieveFileContentCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnListFineTuneEventsCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnDeleteFineTunedModelCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnCreateModerationsCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnListFineTuningJobsCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnCreateFineTuningJobCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnRetrieveFineTuningJobCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnCancelFineTuningJobCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
-    virtual void OnListFineTuningEventsCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
+#define DECLARE_HTTP_CALLBACK(Callback) virtual void Callback(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful);
+#define DECLARE_HTTP_CALLBACK_PROGRESS(Callback) virtual void Callback(FHttpRequestPtr Request, uint64 BytesSent, uint64 BytesReceived);
+
+    DECLARE_HTTP_CALLBACK(OnListModelsCompleted)
+    DECLARE_HTTP_CALLBACK(OnRetrieveModelCompleted)
+    DECLARE_HTTP_CALLBACK(OnCreateCompletionCompleted)
+    DECLARE_HTTP_CALLBACK(OnCreateCompletionStreamCompleted)
+    DECLARE_HTTP_CALLBACK_PROGRESS(OnCreateCompletionStreamProgress)
+    DECLARE_HTTP_CALLBACK(OnCreateChatCompletionCompleted)
+    DECLARE_HTTP_CALLBACK(OnCreateChatCompletionStreamCompleted)
+    DECLARE_HTTP_CALLBACK_PROGRESS(OnCreateChatCompletionStreamProgress)
+    DECLARE_HTTP_CALLBACK(OnCreateImageCompleted)
+    DECLARE_HTTP_CALLBACK(OnCreateImageEditCompleted)
+    DECLARE_HTTP_CALLBACK(OnCreateImageVariationCompleted)
+    DECLARE_HTTP_CALLBACK(OnCreateEmbeddingsCompleted)
+    DECLARE_HTTP_CALLBACK(OnCreateSpeechCompleted)
+    DECLARE_HTTP_CALLBACK(OnCreateAudioTranscriptionCompleted)
+    DECLARE_HTTP_CALLBACK(OnCreateAudioTranslationCompleted)
+    DECLARE_HTTP_CALLBACK(OnListFilesCompleted)
+    DECLARE_HTTP_CALLBACK(OnUploadFileCompleted)
+    DECLARE_HTTP_CALLBACK(OnDeleteFileCompleted)
+    DECLARE_HTTP_CALLBACK(OnRetrieveFileCompleted)
+    DECLARE_HTTP_CALLBACK(OnRetrieveFileContentCompleted)
+    DECLARE_HTTP_CALLBACK(OnDeleteFineTunedModelCompleted)
+    DECLARE_HTTP_CALLBACK(OnCreateModerationsCompleted)
+    DECLARE_HTTP_CALLBACK(OnCreateFineTuningJobCompleted)
+    DECLARE_HTTP_CALLBACK(OnListFineTuningJobsCompleted)
+    DECLARE_HTTP_CALLBACK(OnListFineTuningEventsCompleted)
+    DECLARE_HTTP_CALLBACK(OnListFineTuningCheckpointsCompleted)
+    DECLARE_HTTP_CALLBACK(OnRetrieveFineTuningJobCompleted)
+    DECLARE_HTTP_CALLBACK(OnCancelFineTuningJobCompleted)
+    DECLARE_HTTP_CALLBACK(OnCreateBatchCompleted)
+    DECLARE_HTTP_CALLBACK(OnRetrieveBatchCompleted)
+    DECLARE_HTTP_CALLBACK(OnCancelBatchCompleted)
+    DECLARE_HTTP_CALLBACK(OnListBatchCompleted)
+    DECLARE_HTTP_CALLBACK(OnCreateUploadCompleted)
+    DECLARE_HTTP_CALLBACK(OnAddUploadPartCompleted)
+    DECLARE_HTTP_CALLBACK(OnCompleteUploadCompleted)
+    DECLARE_HTTP_CALLBACK(OnCancelUploadCompleted)
+    DECLARE_HTTP_CALLBACK(OnCreateAssistantCompleted)
+    DECLARE_HTTP_CALLBACK(OnListAssistantsCompleted)
+    DECLARE_HTTP_CALLBACK(OnRetrieveAssistantCompleted)
+    DECLARE_HTTP_CALLBACK(OnModifyAssistantCompleted)
+    DECLARE_HTTP_CALLBACK(OnDeleteAssistantCompleted)
 
     void ProcessRequest(FHttpRequestRef HttpRequest);
-    bool ParseImageRequest(FHttpResponsePtr Response, FImageResponse& ImageResponse);
 
     bool Success(FHttpResponsePtr Response, bool WasSuccessful);
-    void LogResponse(FHttpResponsePtr Response);
-    void LogError(const FString& ErrorText);
+    void Log(const FString& Info) const;
+    void LogResponse(FHttpResponsePtr Response) const;
+    void LogError(const FString& ErrorText) const;
 
     template <typename OutStructType>
     FString SerializeRequest(const OutStructType& OutStruct) const
     {
         TSharedPtr<FJsonObject> Json = FJsonObjectConverter::UStructToJsonObject(OutStruct);
+        UJsonFuncLib::RemoveEmptyArrays(Json);
         FString RequestBodyStr;
-        UOpenAIFuncLib::JsonToString(Json, RequestBodyStr);
+        UJsonFuncLib::JsonToString(Json, RequestBodyStr);
         return RequestBodyStr;
     }
+
+    FHttpRequestRef MakeRequestHeaders(const FOpenAIAuth& Auth) const;
+    FOpenAIResponseMetadata GetResponseHeaders(FHttpResponsePtr Response) const;
 
     template <typename OutStructType>
     FHttpRequestRef MakeRequest(const OutStructType& OutStruct, const FString& URL, const FString& Method, const FOpenAIAuth& Auth) const
     {
-        auto HttpRequest = CreateRequest();
-        HttpRequest->SetHeader("Content-Type", "application/json");
-        HttpRequest->SetHeader("Authorization", FString("Bearer ").Append(Auth.APIKey));
-        HttpRequest->SetHeader("OpenAI-Organization", Auth.OrganizationID);
-        HttpRequest->SetHeader("OpenAI-Project", Auth.ProjectID);
+        auto HttpRequest = MakeRequestHeaders(Auth);
         HttpRequest->SetURL(URL);
         HttpRequest->SetVerb(Method);
-        HttpRequest->SetContentAsString(SerializeRequest(OutStruct));
+
+        const FString Content = SerializeRequest(OutStruct);
+        Log(FString("Content: ").Append(Content));
+
+        const FString PostprocessedContent = UJsonFuncLib::RemoveOptionalValuesThatNotSet(Content);
+        Log(FString("Postprocessed content was set as: ").Append(PostprocessedContent));
+
+        HttpRequest->SetContentAsString(PostprocessedContent);
         return HttpRequest;
     }
     // specializations
@@ -309,15 +439,18 @@ private:
     {
         if (!Success(Response, WasSuccessful)) return;
 
+        const FString Content = Response.IsValid() ? Response->GetContentAsString() : FString{};
+        const FString ResponseURL = Response.IsValid() ? Response->GetURL() : FString{};
+
         ParsedResponseType ParsedResponse;
-        if (UOpenAIFuncLib::ParseJSONToStruct(Response->GetContentAsString(), &ParsedResponse))
+        if (UJsonFuncLib::ParseJSONToStruct(Content, &ParsedResponse))
         {
-            Delegate.Broadcast(ParsedResponse);
+            Delegate.Broadcast(ParsedResponse, GetResponseHeaders(Response));
         }
         else
         {
-            LogError("JSON deserialization error");
-            RequestError.Broadcast(Response->GetURL(), Response->GetContentAsString());
+            LogError(FString::Format(TEXT("JSON deserialization error: {0}"), {Content}));
+            RequestError.Broadcast(ResponseURL, Content);
         }
     }
 
@@ -337,12 +470,11 @@ private:
 
 private:
     TTuple<FString, FString> GetErrorData(FHttpRequestPtr Request, FHttpResponsePtr Response) const;
-    bool HandleString(FString& IncomeString, bool& LastString) const;
 
     template <typename ResponseType>
     bool ParseStreamRequest(FHttpResponsePtr Response, TArray<ResponseType>& Responses)
     {
-        if (!Response) return false;
+        if (!Response.IsValid()) return false;
 
         TArray<FString> StringArray;
         Response->GetContentAsString().ParseIntoArrayLines(StringArray);
@@ -350,14 +482,14 @@ private:
         for (auto& String : StringArray)
         {
             bool LastString{false};
-            if (HandleString(String, LastString))
+            if (OpenAI::ChatParser::CleanChunkResponseString(String, LastString))
             {
                 if (LastString)
                 {
                     break;
                 }
                 ResponseType ParsedResponse;
-                if (!UOpenAIFuncLib::ParseJSONToStruct(String, &ParsedResponse)) continue;
+                if (!UJsonFuncLib::ParseJSONToStruct(String, &ParsedResponse)) continue;
 
                 Responses.Add(ParsedResponse);
             }
@@ -366,7 +498,7 @@ private:
     }
 
     template <typename ResponseType, typename DelegateType>
-    void OnStreamProgress(FHttpRequestPtr Request, int32 BytesSent, int32 BytesReceived, DelegateType& Delegate)
+    void OnStreamProgress(FHttpRequestPtr Request, uint64 BytesSent, uint64 BytesReceived, DelegateType& Delegate)
     {
         const auto& Response = Request->GetResponse();
         TArray<ResponseType> ParsedResponses;
@@ -374,9 +506,9 @@ private:
         if (ParseStreamRequest(Response, ParsedResponses))
         {
             LogResponse(Response);
-            Delegate.Broadcast(ParsedResponses);
+            Delegate.Broadcast(ParsedResponses, GetResponseHeaders(Response));
         }
-        else if (Response)
+        else if (Response.IsValid())
         {
             LogError(Response->GetContentAsString());
             // RequestError.Broadcast(Response->GetURL(), Response->GetContentAsString());
@@ -408,15 +540,16 @@ private:
         if (ParseStreamRequest(Response, ParsedResponses))
         {
             LogResponse(Response);
-            Delegate.Broadcast(ParsedResponses);
+            Delegate.Broadcast(ParsedResponses, GetResponseHeaders(Response));
         }
         else
         {
-            LogError("JSON deserialization error");
-            LogError(Response->GetContentAsString());
-            RequestError.Broadcast(Response->GetURL(), Response->GetContentAsString());
+            const FString Content = Response.IsValid() ? Response->GetContentAsString() : FString{};
+            const FString ResponseURL = Response.IsValid() ? Response->GetURL() : FString{};
+
+            LogError(FString::Format(TEXT("JSON deserialization error: {0}"), {Content}));
+            LogError(Content);
+            RequestError.Broadcast(ResponseURL, Content);
         }
     }
-
-    void CleanChatCompletionFieldsThatCantBeEmpty(const FChatCompletion& ChatCompletion, TSharedPtr<FJsonObject>& Json) const;
 };

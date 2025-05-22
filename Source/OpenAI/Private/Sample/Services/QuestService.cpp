@@ -1,7 +1,8 @@
 // OpenAI ServiceSample, Copyright LifeEXE. All Rights Reserved.
 
 #include "Sample/Services/QuestService.h"
-#include "Funclib/OpenAIFuncLib.h"
+#include "FuncLib/JsonFuncLib.h"
+#include "Logging/StructuredLog.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogQuestService, All, All);
 
@@ -58,7 +59,7 @@ FString UQuestService::MakeFunction() const
 
     ParamsObj->SetArrayField("required", RequiredArray);
 
-    return UOpenAIFuncLib::MakeFunctionsString(ParamsObj);
+    return UJsonFuncLib::MakeFunctionsString(ParamsObj);
 }
 
 void UQuestService::Call(const TSharedPtr<FJsonObject>& Args, const FString& InToolID)
@@ -66,15 +67,15 @@ void UQuestService::Call(const TSharedPtr<FJsonObject>& Args, const FString& InT
     Super::Call(Args, InToolID);
 
     FString ArgsStr;
-    if (!UOpenAIFuncLib::JsonToString(Args, ArgsStr))
+    if (!UJsonFuncLib::JsonToString(Args, ArgsStr))
     {
-        UE_LOG(LogQuestService, Display, TEXT("Can't convert JSON to string"));
+        UE_LOGFMT(LogQuestService, Display, "Can't convert JSON to string");
     }
 
     FAlienRampageGameProps Props;
-    if (!UOpenAIFuncLib::ParseJSONToStruct<FAlienRampageGameProps>(ArgsStr, &Props))
+    if (!UJsonFuncLib::ParseJSONToStruct<FAlienRampageGameProps>(ArgsStr, &Props))
     {
-        UE_LOG(LogQuestService, Error, TEXT("Can't parse args"));
+        UE_LOGFMT(LogQuestService, Error, "Can't parse args");
         ServiceDataError.Broadcast("QuestService can't parse args from OpenAI.");
         return;
     }

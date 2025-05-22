@@ -5,12 +5,11 @@
 #include "CoreMinimal.h"
 #include "Misc/AutomationTest.h"
 #include "OpenAIProviderFake.h"
-#include "Provider/ResponseTypes.h"
-#include "Provider/RequestTypes.h"
-#include "Provider/CommonTypes.h"
+#include "Provider/Types/ModelTypes.h"
+#include "Provider/Types/CommonTypes.h"
 
 DEFINE_SPEC(FOpenAIProviderFake, "OpenAI.Provider",
-    EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter | EAutomationTestFlags::HighPriority)
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter | EAutomationTestFlags::HighPriority)
 
 void FOpenAIProviderFake::Define()
 {
@@ -22,20 +21,14 @@ void FOpenAIProviderFake::Define()
                 {
                     FListModelsResponse ListModelsResponse;
                     auto* OpenAIProvider = NewObject<UOpenAIProviderFake>();
-                    OpenAIProvider->OnListModelsCompleted().AddLambda([&](const FListModelsResponse& Response)  //
-                        {                                                                                       //
+                    OpenAIProvider->OnListModelsCompleted().AddLambda(
+                        [&](const FListModelsResponse& Response, const FOpenAIResponseMetadata& ResponseMetadata)  //
+                        {                                                                                          //
                             ListModelsResponse = Response;
                         });
                     OpenAIProvider->SetResponse(
                         "{\"object\":\"list\",\"data\":[{\"id\":\"whisper-1\",\"object\":\"model\",\"created\":1677532384,\"owned_by\":"
-                        "\"openai-internal\",\"permission\":[{\"id\":\"modelperm-xxxxxxxxxx\",\"object\":\"model_permission\",\"created\":"
-                        "1683912666,\"allow_create_engine\":false,\"allow_sampling\":true,\"allow_logprobs\":true,"
-                        "\"allow_search_indices\":false,\"allow_view\":true,\"allow_fine_tuning\":false,\"organization\":\"*\",\"group\":"
-                        "null,\"is_blocking\":false}],\"root\":\"whisper-1\",\"parent\":null},{\"id\":\"babbage\",\"object\":\"model\","
-                        "\"created\":1649358449,\"owned_by\":\"openai\",\"permission\":[{\"id\":\"modelperm-0000000000\","
-                        "\"object\":\"model_permission\",\"created\":1669085501,\"allow_create_engine\":false,\"allow_sampling\":true,"
-                        "\"allow_logprobs\":true,\"allow_search_indices\":false,\"allow_view\":true,\"allow_fine_tuning\":false,"
-                        "\"organization\":\"*\",\"group\":null,\"is_blocking\":false}],\"root\":\"babbage\",\"parent\":null},]}");
+                        "\"openai-internal\"},{\"id\":\"babbage\",\"object\":\"model\",\"created\":1649358449,\"owned_by\":\"openai\"}]}");
                     OpenAIProvider->ListModels(FOpenAIAuth{});
 
                     TestTrueExpr(ListModelsResponse.Object.Equals("list"));
@@ -45,41 +38,11 @@ void FOpenAIProviderFake::Define()
                     TestTrueExpr(ListModelsResponse.Data[0].Object.Equals("model"));
                     TestTrueExpr(ListModelsResponse.Data[0].Created == 1677532384);
                     TestTrueExpr(ListModelsResponse.Data[0].Owned_By.Equals("openai-internal"));
-                    TestTrueExpr(ListModelsResponse.Data[0].Permission.Num() == 1);
-                    TestTrueExpr(ListModelsResponse.Data[0].Permission[0].ID.Equals("modelperm-xxxxxxxxxx"));
-                    TestTrueExpr(ListModelsResponse.Data[0].Permission[0].Object.Equals("model_permission"));
-                    TestTrueExpr(ListModelsResponse.Data[0].Permission[0].Created == 1683912666);
-                    TestTrueExpr(ListModelsResponse.Data[0].Permission[0].Allow_Create_Engine == false);
-                    TestTrueExpr(ListModelsResponse.Data[0].Permission[0].Allow_Sampling == true);
-                    TestTrueExpr(ListModelsResponse.Data[0].Permission[0].Allow_Logprobs == true);
-                    TestTrueExpr(ListModelsResponse.Data[0].Permission[0].Allow_Search_Indices == false);
-                    TestTrueExpr(ListModelsResponse.Data[0].Permission[0].Allow_View == true);
-                    TestTrueExpr(ListModelsResponse.Data[0].Permission[0].Allow_Fine_Tuning == false);
-                    TestTrueExpr(ListModelsResponse.Data[0].Permission[0].Organization.Equals("*"));
-                    TestTrueExpr(ListModelsResponse.Data[0].Permission[0].Group.IsEmpty());
-                    TestTrueExpr(ListModelsResponse.Data[0].Permission[0].Is_Blocking == false);
-                    TestTrueExpr(ListModelsResponse.Data[0].Root.Equals("whisper-1"));
-                    TestTrueExpr(ListModelsResponse.Data[0].Parent.IsEmpty());
 
                     TestTrueExpr(ListModelsResponse.Data[1].ID.Equals("babbage"));
                     TestTrueExpr(ListModelsResponse.Data[1].Object.Equals("model"));
                     TestTrueExpr(ListModelsResponse.Data[1].Created == 1649358449);
                     TestTrueExpr(ListModelsResponse.Data[1].Owned_By.Equals("openai"));
-                    TestTrueExpr(ListModelsResponse.Data[1].Permission.Num() == 1);
-                    TestTrueExpr(ListModelsResponse.Data[1].Permission[0].ID.Equals("modelperm-0000000000"));
-                    TestTrueExpr(ListModelsResponse.Data[1].Permission[0].Object.Equals("model_permission"));
-                    TestTrueExpr(ListModelsResponse.Data[1].Permission[0].Created == 1669085501);
-                    TestTrueExpr(ListModelsResponse.Data[1].Permission[0].Allow_Create_Engine == false);
-                    TestTrueExpr(ListModelsResponse.Data[1].Permission[0].Allow_Sampling == true);
-                    TestTrueExpr(ListModelsResponse.Data[1].Permission[0].Allow_Logprobs == true);
-                    TestTrueExpr(ListModelsResponse.Data[1].Permission[0].Allow_Search_Indices == false);
-                    TestTrueExpr(ListModelsResponse.Data[1].Permission[0].Allow_View == true);
-                    TestTrueExpr(ListModelsResponse.Data[1].Permission[0].Allow_Fine_Tuning == false);
-                    TestTrueExpr(ListModelsResponse.Data[1].Permission[0].Organization.Equals("*"));
-                    TestTrueExpr(ListModelsResponse.Data[1].Permission[0].Group.IsEmpty());
-                    TestTrueExpr(ListModelsResponse.Data[1].Permission[0].Is_Blocking == false);
-                    TestTrueExpr(ListModelsResponse.Data[1].Root.Equals("babbage"));
-                    TestTrueExpr(ListModelsResponse.Data[1].Parent.IsEmpty());
                 });
 
             It("RetrieveModelShouldBeParsedCorrectly",
@@ -87,38 +50,18 @@ void FOpenAIProviderFake::Define()
                 {
                     FRetrieveModelResponse RetrieveModelResponse;
                     auto* OpenAIProvider = NewObject<UOpenAIProviderFake>();
-                    OpenAIProvider->OnRetrieveModelCompleted().AddLambda([&](const FRetrieveModelResponse& Response)  //
+                    OpenAIProvider->OnRetrieveModelCompleted().AddLambda(
+                        [&](const FRetrieveModelResponse& Response, const FOpenAIResponseMetadata& ResponseMetadata)  //
                         {                                                                                             //
                             RetrieveModelResponse = Response;
                         });
-                    OpenAIProvider->SetResponse(
-                        "{\"id\":\"MyModel\",\"object\":\"model\",\"created\":1649357491,\"owned_by\":\"openai\",\"permission\":[{\"id\":"
-                        "\"modelperm-0000000000\",\"object\":\"model_permission\",\"created\":1675997661,\"allow_create_"
-                        "engine\":false,\"allow_sampling\":true,\"allow_logprobs\":true,\"allow_search_indices\":false,\"allow_view\":true,"
-                        "\"allow_fine_tuning\":false,\"organization\":\"*\",\"group\":null,\"is_blocking\":false}],\"root\":\"MyModel\","
-                        "\"parent\":null}");
+                    OpenAIProvider->SetResponse("{\"id\":\"MyModel\",\"object\":\"model\",\"created\":1649357491,\"owned_by\":\"openai\"}");
                     OpenAIProvider->RetrieveModel("MyModel", FOpenAIAuth{});
 
                     TestTrueExpr(RetrieveModelResponse.ID.Equals("MyModel"));
                     TestTrueExpr(RetrieveModelResponse.Object.Equals("model"));
                     TestTrueExpr(RetrieveModelResponse.Created == 1649357491);
                     TestTrueExpr(RetrieveModelResponse.Owned_By.Equals("openai"));
-
-                    TestTrueExpr(RetrieveModelResponse.Permission.Num() == 1);
-                    TestTrueExpr(RetrieveModelResponse.Permission[0].ID.Equals("modelperm-0000000000"));
-                    TestTrueExpr(RetrieveModelResponse.Permission[0].Object.Equals("model_permission"));
-                    TestTrueExpr(RetrieveModelResponse.Permission[0].Created == 1675997661);
-                    TestTrueExpr(RetrieveModelResponse.Permission[0].Allow_Create_Engine == false);
-                    TestTrueExpr(RetrieveModelResponse.Permission[0].Allow_Sampling == true);
-                    TestTrueExpr(RetrieveModelResponse.Permission[0].Allow_Logprobs == true);
-                    TestTrueExpr(RetrieveModelResponse.Permission[0].Allow_Search_Indices == false);
-                    TestTrueExpr(RetrieveModelResponse.Permission[0].Allow_View == true);
-                    TestTrueExpr(RetrieveModelResponse.Permission[0].Allow_Fine_Tuning == false);
-                    TestTrueExpr(RetrieveModelResponse.Permission[0].Organization.Equals("*"));
-                    TestTrueExpr(RetrieveModelResponse.Permission[0].Group.IsEmpty());
-                    TestTrueExpr(RetrieveModelResponse.Permission[0].Is_Blocking == false);
-                    TestTrueExpr(RetrieveModelResponse.Root.Equals("MyModel"));
-                    TestTrueExpr(RetrieveModelResponse.Parent.IsEmpty());
                 });
 
             It("CompletionShouldBeParsedCorrectly",
@@ -126,8 +69,9 @@ void FOpenAIProviderFake::Define()
                 {
                     FCompletionResponse CompletionResponse;
                     auto* OpenAIProvider = NewObject<UOpenAIProviderFake>();
-                    OpenAIProvider->OnCreateCompletionCompleted().AddLambda([&](const FCompletionResponse& Response)  //
-                        {                                                                                             //
+                    OpenAIProvider->OnCreateCompletionCompleted().AddLambda(
+                        [&](const FCompletionResponse& Response, const FOpenAIResponseMetadata& ResponseMetadata)  //
+                        {                                                                                          //
                             CompletionResponse = Response;
                         });
                     OpenAIProvider->SetResponse(
@@ -179,8 +123,9 @@ void FOpenAIProviderFake::Define()
                 {
                     FChatCompletionResponse ChatCompletionResponse;
                     auto* OpenAIProvider = NewObject<UOpenAIProviderFake>();
-                    OpenAIProvider->OnCreateChatCompletionCompleted().AddLambda([&](const FChatCompletionResponse& Response)  //
-                        {                                                                                                     //
+                    OpenAIProvider->OnCreateChatCompletionCompleted().AddLambda(
+                        [&](const FChatCompletionResponse& Response, const FOpenAIResponseMetadata& ResponseMetadata)  //
+                        {                                                                                              //
                             ChatCompletionResponse = Response;
                         });
                     OpenAIProvider->SetResponse(
@@ -194,11 +139,14 @@ void FOpenAIProviderFake::Define()
                         "\"finish_reason\":\"stop\",\"index\":0}]}");
 
                     FChatCompletion ChatCompletion;
-                    ChatCompletion.Messages = {{"user", "What is Unreal Engine?"}};
+                    FMessage Message;
+                    Message.Role = "user";
+                    Message.Content = "What is Unreal Engine?";
+                    ChatCompletion.Messages.Add(Message);
                     ChatCompletion.Model = "gpt-4";
                     ChatCompletion.Stream = false;
                     ChatCompletion.N = 1;
-                    ChatCompletion.Max_Tokens = 2000;
+                    ChatCompletion.Max_Completion_Tokens.Set(2000);
                     OpenAIProvider->CreateChatCompletion(ChatCompletion, FOpenAIAuth{});
 
                     TestTrueExpr(ChatCompletionResponse.ID.Equals("chatcmpl-xxxxxxxxxxxxxxxxxx"));

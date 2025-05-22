@@ -3,11 +3,12 @@
 #pragma once
 
 #include "Kismet/BlueprintAsyncActionBase.h"
-#include "Provider/ResponseTypes.h"
-#include "Provider/RequestTypes.h"
+#include "Provider/Types/EmbeddingTypes.h"
+#include "Provider/Types/CommonTypes.h"
 #include "EmbeddingsAction.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnEmbeddings, const FEmbeddingsResponse&, Response, const FOpenAIError&, RawError);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
+    FOnEmbeddings, const FEmbeddingsResponse&, Response, const FOpenAIResponseMetadata&, ResponseMetadata, const FOpenAIError&, RawError);
 
 class UOpenAIProvider;
 
@@ -32,7 +33,7 @@ private:
 
     void TryToOverrideURL(UOpenAIProvider* Provider);
 
-    void OnCreateEmbeddingsCompleted(const FEmbeddingsResponse& Response);
+    void OnCreateEmbeddingsCompleted(const FEmbeddingsResponse& Response, const FOpenAIResponseMetadata& ResponseMetadata);
     void OnRequestError(const FString& URL, const FString& Content);
 
 private:

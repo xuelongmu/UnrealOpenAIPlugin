@@ -1,5 +1,26 @@
 // OpenAI, Copyright LifeEXE. All Rights Reserved.
 
+/*
+ ___       ___  ________ _______
+|\  \     |\  \|\  _____\\  ___ \
+\ \  \    \ \  \ \  \__/\ \   __/|
+ \ \  \    \ \  \ \   __\\ \  \_|/__
+  \ \  \____\ \  \ \  \_| \ \  \_|\ \
+   \ \_______\ \__\ \__\   \ \_______\
+    \|_______|\|__|\|__|    \|_______|
+
+
+
+ _______      ___    ___ _______
+|\  ___ \    |\  \  /  /|\  ___ \
+\ \   __/|   \ \  \/  / | \   __/|
+ \ \  \_|/__  \ \    / / \ \  \_|/__
+  \ \  \_|\ \  /     \/   \ \  \_|\ \
+   \ \_______\/  /\   \    \ \_______\
+    \|_______/__/ /\ __\    \|_______|
+             |__|/ \|__|
+*/
+
 #pragma once
 
 // https://platform.openai.com/docs/api-reference
@@ -26,6 +47,9 @@ public:
     virtual FString Files() const = 0;
     virtual FString FineTuningJobs() const = 0;
     virtual FString Moderations() const = 0;
+    virtual FString Batches() const = 0;
+    virtual FString Uploads() const = 0;
+    virtual FString Assistants() const = 0;
 };
 
 namespace V1
@@ -49,6 +73,9 @@ public:
     virtual FString Files() const override { return API_URL + "/v1/files"; }
     virtual FString FineTuningJobs() const override { return API_URL + "/v1/fine_tuning/jobs"; }
     virtual FString Moderations() const override { return API_URL + "/v1/moderations"; }
+    virtual FString Batches() const override { return API_URL + "/v1/batches"; }
+    virtual FString Uploads() const override { return API_URL + "/v1/uploads"; }
+    virtual FString Assistants() const override { return API_URL + "/v1/assistants"; }
 
 private:
     const FString API_URL;
@@ -70,6 +97,9 @@ struct FOpenAIEndpoints
     FString Files;
     FString FineTuningJobs;
     FString Moderations;
+    FString Batches;
+    FString Uploads;
+    FString Assistants;
 };
 
 class GenericAPI : public OpenAI::IAPI
@@ -90,6 +120,9 @@ public:
     virtual FString Files() const override { return OpenAIEndpoints.Files; }
     virtual FString FineTuningJobs() const override { return OpenAIEndpoints.FineTuningJobs; }
     virtual FString Moderations() const override { return OpenAIEndpoints.Moderations; }
+    virtual FString Batches() const override { return OpenAIEndpoints.Batches; }
+    virtual FString Uploads() const override { return OpenAIEndpoints.Uploads; }
+    virtual FString Assistants() const override { return OpenAIEndpoints.Assistants; }
 
 private:
     const FOpenAIEndpoints OpenAIEndpoints;

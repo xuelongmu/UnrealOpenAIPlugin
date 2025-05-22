@@ -4,7 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
-#include "Provider/CommonTypes.h"
+#include "Provider/Types/CommonTypes.h"
+#include "Provider/Types/Chat/ChatCommonTypes.h"
 #include "Logging/LogVerbosity.h"
 #include "Runtime/CoreUObject/Public/Templates/SubclassOf.h"
 #include "ChatGPT.generated.h"
@@ -54,7 +55,7 @@ private:
 
     FOpenAIAuth Auth;
     FString OpenAIModel;
-    int32 MaxTokens{100};
+    int32 MaxCompletionTokens{100};
 
     TArray<FMessage> ChatHistory;
     FMessage AssistantMessage;

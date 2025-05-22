@@ -1,11 +1,16 @@
 // OpenAI, Copyright LifeEXE. All Rights Reserved.
 
 #include "Provider/OpenAIProvider.h"
+#include "Provider/JsonParsers/ModerationParser.h"
+#include "Provider/JsonParsers/ImageParser.h"
+#include "Provider/JsonParsers/AudioParser.h"
 #include "API/API.h"
 #include "JsonObjectConverter.h"
 #include "Serialization/JsonReader.h"
 #include "Http/HttpHelper.h"
 #include "FuncLib/OpenAIFuncLib.h"
+#include "FuncLib/JsonFuncLib.h"
+#include "Logging/StructuredLog.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogOpenAIProvider, All, All);
 
@@ -39,6 +44,14 @@ void UOpenAIProvider::RetrieveModel(const FString& ModelName, const FOpenAIAuth&
     ProcessRequest(HttpRequest);
 }
 
+void UOpenAIProvider::DeleteFineTunedModel(const FString& ModelID, const FOpenAIAuth& Auth)
+{
+    const auto URL = FString(API->Models()).Append("/").Append(ModelID);
+    auto HttpRequest = MakeRequest(URL, "DELETE", Auth);
+    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnDeleteFineTunedModelCompleted);
+    ProcessRequest(HttpRequest);
+}
+
 void UOpenAIProvider::CreateCompletion(const FCompletion& Completion, const FOpenAIAuth& Auth)
 {
     check(!Completion.Model.IsEmpty());
@@ -48,7 +61,7 @@ void UOpenAIProvider::CreateCompletion(const FCompletion& Completion, const FOpe
     if (Completion.Stream)
     {
         HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnCreateCompletionStreamCompleted);
-        HttpRequest->OnRequestProgress().BindUObject(this, &ThisClass::OnCreateCompletionStreamProgress);
+        HttpRequest->OnRequestProgress64().BindUObject(this, &ThisClass::OnCreateCompletionStreamProgress);
     }
     else
     {
@@ -67,7 +80,7 @@ void UOpenAIProvider::CreateChatCompletion(const FChatCompletion& ChatCompletion
     if (ChatCompletion.Stream)
     {
         HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnCreateChatCompletionStreamCompleted);
-        HttpRequest->OnRequestProgress().BindUObject(this, &ThisClass::OnCreateChatCompletionStreamProgress);
+        HttpRequest->OnRequestProgress64().BindUObject(this, &ThisClass::OnCreateChatCompletionStreamProgress);
     }
     else
     {
@@ -81,6 +94,9 @@ void UOpenAIProvider::CreateImage(const FOpenAIImage& Image, const FOpenAIAuth& 
     check(!Image.Prompt.IsEmpty());
 
     auto HttpRequest = MakeRequest(Image, API->ImageGenerations(), "POST", Auth);
+    // @todo: make this an API parameter
+    const float timeoutSeconds = 60.0f * 5.0f;  // 5 mins
+    HttpRequest->SetActivityTimeout(timeoutSeconds);
     HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnCreateImageCompleted);
     ProcessRequest(HttpRequest);
 }
@@ -96,7 +112,11 @@ void UOpenAIProvider::CreateImageEdit(const FOpenAIImageEdit& ImageEdit, const F
     HttpRequest->SetVerb("POST");
 
     TArray<uint8> RequestContent;
-    RequestContent.Append(HttpHelper::AddMIMEFile(ImageEdit.Image, "image", BeginBoundary));
+    for (const auto& Image : ImageEdit.Image)
+    {
+        RequestContent.Append(HttpHelper::AddMIMEFile(Image, "image", BeginBoundary));
+    }
+
     if (!ImageEdit.Mask.IsEmpty())
     {
         RequestContent.Append(HttpHelper::AddMIMEFile(ImageEdit.Mask, "mask", BeginBoundary));
@@ -105,7 +125,10 @@ void UOpenAIProvider::CreateImageEdit(const FOpenAIImageEdit& ImageEdit, const F
     RequestContent.Append(HttpHelper::AddMIME("n", FString::FromInt(ImageEdit.N), BeginBoundary));
     RequestContent.Append(HttpHelper::AddMIME("size", ImageEdit.Size, BeginBoundary));
     RequestContent.Append(HttpHelper::AddMIME("response_format", ImageEdit.Response_Format, BeginBoundary));
-    RequestContent.Append(HttpHelper::AddMIME("user", ImageEdit.User, BeginBoundary));
+    if (ImageEdit.User.IsSet)
+    {
+        RequestContent.Append(HttpHelper::AddMIME("user", ImageEdit.User.Value, BeginBoundary));
+    }
     RequestContent.Append((uint8*)TCHAR_TO_ANSI(*EndBoundary), EndBoundary.Len());
 
     HttpRequest->SetContent(RequestContent);
@@ -128,7 +151,10 @@ void UOpenAIProvider::CreateImageVariation(const FOpenAIImageVariation& ImageVar
     RequestContent.Append(HttpHelper::AddMIME("n", FString::FromInt(ImageVariation.N), BeginBoundary));
     RequestContent.Append(HttpHelper::AddMIME("size", ImageVariation.Size, BeginBoundary));
     RequestContent.Append(HttpHelper::AddMIME("response_format", ImageVariation.Response_Format, BeginBoundary));
-    RequestContent.Append(HttpHelper::AddMIME("user", ImageVariation.User, BeginBoundary));
+    if (ImageVariation.User.IsSet)
+    {
+        RequestContent.Append(HttpHelper::AddMIME("user", ImageVariation.User.Value, BeginBoundary));
+    }
     RequestContent.Append((uint8*)TCHAR_TO_ANSI(*EndBoundary), EndBoundary.Len());
 
     HttpRequest->SetContent(RequestContent);
@@ -247,18 +273,17 @@ void UOpenAIProvider::RetrieveFileContent(const FString& FileID, const FOpenAIAu
     ProcessRequest(HttpRequest);
 }
 
-void UOpenAIProvider::DeleteFineTunedModel(const FString& ModelID, const FOpenAIAuth& Auth)
-{
-    const auto URL = FString(API->Models()).Append("/").Append(ModelID);
-    auto HttpRequest = MakeRequest(URL, "DELETE", Auth);
-    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnDeleteFineTunedModelCompleted);
-    ProcessRequest(HttpRequest);
-}
-
 void UOpenAIProvider::CreateModerations(const FModerations& Moderations, const FOpenAIAuth& Auth)
 {
     auto HttpRequest = MakeRequest(Moderations, API->Moderations(), "POST", Auth);
     HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnCreateModerationsCompleted);
+    ProcessRequest(HttpRequest);
+}
+
+void UOpenAIProvider::CreateFineTuningJob(const FFineTuningJob& FineTuningJob, const FOpenAIAuth& Auth)
+{
+    auto HttpRequest = MakeRequest(FineTuningJob, API->FineTuningJobs(), "POST", Auth);
+    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnCreateFineTuningJobCompleted);
     ProcessRequest(HttpRequest);
 }
 
@@ -270,31 +295,26 @@ void UOpenAIProvider::ListFineTuningJobs(const FOpenAIAuth& Auth, const FFineTun
     ProcessRequest(HttpRequest);
 }
 
-void UOpenAIProvider::CreateFineTuningJob(const FFineTuningJob& FineTuningJob, const FOpenAIAuth& Auth)
+void UOpenAIProvider::ListFineTuningEvents(
+    const FString& FineTuningJobID, const FOpenAIAuth& Auth, const FFineTuningQueryParameters& FineTuningQueryParameters)
 {
-    // The current request is case sensitive for file ids and optional params.
-    // That's why special serialisation is needed.
+    const auto URL =
+        FString(API->FineTuningJobs()).Append("/").Append(FineTuningJobID).Append("/events").Append(FineTuningQueryParameters.ToQuery());
+    auto HttpRequest = MakeRequest(URL, "GET", Auth);
+    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnListFineTuningEventsCompleted);
+    ProcessRequest(HttpRequest);
+}
 
-    auto HttpRequest = MakeRequest(API->FineTuningJobs(), "POST", Auth);
-
-    TSharedPtr<FJsonObject> RequestBody = MakeShareable(new FJsonObject());
-    RequestBody->SetStringField("training_file", FineTuningJob.Training_File);
-    RequestBody->SetStringField("model", FineTuningJob.Model);
-    if (FineTuningJob.Hyperparameters.IsSet())
-    {
-        TSharedPtr<FJsonObject> HyperparametersObj = MakeShareable(new FJsonObject());
-        HyperparametersObj->SetStringField("n_epochs", FineTuningJob.Hyperparameters.GetValue().N_Epochs);
-        RequestBody->SetObjectField("hyperparameters", HyperparametersObj);
-    }
-    SetOptional(RequestBody, FineTuningJob.Suffix, "suffix");
-    SetOptional(RequestBody, FineTuningJob.Validation_File, "validation_file");
-
-    FString RequestBodyStr;
-    TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&RequestBodyStr);
-    FJsonSerializer::Serialize(RequestBody.ToSharedRef(), Writer);
-
-    HttpRequest->SetContentAsString(RequestBodyStr);
-    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnCreateFineTuningJobCompleted);
+void UOpenAIProvider::ListFineTuningCheckpoints(
+    const FString& FineTuningJobID, const FOpenAIAuth& Auth, const FFineTuningQueryParameters& FineTuningQueryParameters)
+{
+    const auto URL = FString(API->FineTuningJobs())
+                         .Append("/")
+                         .Append(FineTuningJobID)
+                         .Append("/checkpoints")
+                         .Append(FineTuningQueryParameters.ToQuery());
+    auto HttpRequest = MakeRequest(URL, "GET", Auth);
+    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnListFineTuningCheckpointsCompleted);
     ProcessRequest(HttpRequest);
 }
 
@@ -314,27 +334,133 @@ void UOpenAIProvider::CancelFineTuningJob(const FString& FineTuningJobID, const 
     ProcessRequest(HttpRequest);
 }
 
-void UOpenAIProvider::ListFineTuningEvents(
-    const FString& FineTuningJobID, const FOpenAIAuth& Auth, const FFineTuningQueryParameters& FineTuningQueryParameters)
+void UOpenAIProvider::CreateBatch(const FCreateBatch& CreateBatch, const FOpenAIAuth& Auth)
 {
-    const auto URL =
-        FString(API->FineTuningJobs()).Append("/").Append(FineTuningJobID).Append("/events").Append(FineTuningQueryParameters.ToQuery());
+    auto HttpRequest = MakeRequest(CreateBatch, API->Batches(), "POST", Auth);
+    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnCreateBatchCompleted);
+    ProcessRequest(HttpRequest);
+}
+
+void UOpenAIProvider::RetrieveBatch(const FString& BatchId, const FOpenAIAuth& Auth)
+{
+    const auto URL = FString(API->Batches()).Append("/").Append(BatchId);
     auto HttpRequest = MakeRequest(URL, "GET", Auth);
-    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnListFineTuningEventsCompleted);
+    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnRetrieveBatchCompleted);
+    ProcessRequest(HttpRequest);
+}
+
+void UOpenAIProvider::CancelBatch(const FString& BatchId, const FOpenAIAuth& Auth)
+{
+    const auto URL = FString(API->Batches()).Append("/").Append(BatchId).Append("/cancel");
+    auto HttpRequest = MakeRequest(URL, "POST", Auth);
+    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnCancelBatchCompleted);
+    ProcessRequest(HttpRequest);
+}
+
+void UOpenAIProvider::ListBatch(const FListBatch& ListBatch, const FOpenAIAuth& Auth)
+{
+    const auto URL = FString(API->Batches()).Append(ListBatch.ToQuery());
+    auto HttpRequest = MakeRequest(URL, "GET", Auth);
+    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnListBatchCompleted);
+    ProcessRequest(HttpRequest);
+}
+
+void UOpenAIProvider::CreateUpload(const FCreateUpload& CreateUpload, const FOpenAIAuth& Auth)
+{
+    auto HttpRequest = MakeRequest(CreateUpload, API->Uploads(), "POST", Auth);
+    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnCreateUploadCompleted);
+    ProcessRequest(HttpRequest);
+}
+
+void UOpenAIProvider::AddUploadPart(const FString& UploadId, const FAddUploadPart& AddUploadPart, const FOpenAIAuth& Auth)
+{
+    const auto& [Boundary, BeginBoundary, EndBoundary] = HttpHelper::MakeBoundary();
+    auto HttpRequest = CreateRequest();
+    HttpRequest->SetHeader("Authorization", "Bearer " + Auth.APIKey);
+    const FString URL = API->Uploads().Append("/").Append(UploadId).Append("/parts");
+    HttpRequest->SetURL(URL);
+    HttpRequest->SetHeader("Content-Type", "multipart/form-data; boundary =" + Boundary);
+    HttpRequest->SetVerb("POST");
+
+    TArray<uint8> RequestContent;
+    RequestContent.Append(HttpHelper::AddMIMEFile(AddUploadPart.Data, "data", BeginBoundary));
+    RequestContent.Append((uint8*)TCHAR_TO_ANSI(*EndBoundary), EndBoundary.Len());
+
+    HttpRequest->SetContent(RequestContent);
+    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnAddUploadPartCompleted);
+    ProcessRequest(HttpRequest);
+}
+
+void UOpenAIProvider::CompleteUpload(const FString& UploadId, const FCompleteUpload& CompleteUpload, const FOpenAIAuth& Auth)
+{
+    const FString URL = API->Uploads().Append("/").Append(UploadId).Append("/complete");
+    auto HttpRequest = MakeRequest(CompleteUpload, URL, "POST", Auth);
+    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnCompleteUploadCompleted);
+    ProcessRequest(HttpRequest);
+}
+
+void UOpenAIProvider::CancelUpload(const FString& UploadId, const FOpenAIAuth& Auth)
+{
+    const FString URL = API->Uploads().Append("/").Append(UploadId).Append("/cancel");
+    auto HttpRequest = MakeRequest(URL, "POST", Auth);
+    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnCancelUploadCompleted);
+    ProcessRequest(HttpRequest);
+}
+
+void UOpenAIProvider::CreateAssistant(const FCreateAssistant& CreateAssistant, const FOpenAIAuth& Auth)
+{
+    auto HttpRequest = MakeRequest(CreateAssistant, API->Assistants(), "POST", Auth);
+    HttpRequest->SetHeader("OpenAI-Beta", "assistants=v2");
+    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnCreateAssistantCompleted);
+    ProcessRequest(HttpRequest);
+}
+
+void UOpenAIProvider::ListAssistants(const FListAssistants& ListAssistants, const FOpenAIAuth& Auth)
+{
+    const auto URL = FString(API->Assistants()).Append(ListAssistants.ToQuery());
+    auto HttpRequest = MakeRequest(URL, "GET", Auth);
+    HttpRequest->SetHeader("OpenAI-Beta", "assistants=v2");
+    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnListAssistantsCompleted);
+    ProcessRequest(HttpRequest);
+}
+
+void UOpenAIProvider::RetrieveAssistant(const FString& AssistantId, const FOpenAIAuth& Auth)
+{
+    const auto URL = FString(API->Assistants()).Append("/").Append(AssistantId);
+    auto HttpRequest = MakeRequest(URL, "GET", Auth);
+    HttpRequest->SetHeader("OpenAI-Beta", "assistants=v2");
+    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnRetrieveAssistantCompleted);
+    ProcessRequest(HttpRequest);
+}
+
+void UOpenAIProvider::ModifyAssistant(const FString& AssistantId, const FModifyAssistant& ModifyAssistant, const FOpenAIAuth& Auth)
+{
+    const auto URL = FString(API->Assistants()).Append("/").Append(AssistantId);
+    auto HttpRequest = MakeRequest(ModifyAssistant, URL, "POST", Auth);
+    HttpRequest->SetHeader("OpenAI-Beta", "assistants=v2");
+    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnModifyAssistantCompleted);
+    ProcessRequest(HttpRequest);
+}
+
+void UOpenAIProvider::DeleteAssistant(const FString& AssistantId, const FOpenAIAuth& Auth)
+{
+    const auto URL = FString(API->Assistants()).Append("/").Append(AssistantId);
+    auto HttpRequest = MakeRequest(URL, "DELETE", Auth);
+    HttpRequest->SetHeader("OpenAI-Beta", "assistants=v2");
+    HttpRequest->OnProcessRequestComplete().BindUObject(this, &ThisClass::OnDeleteAssistantCompleted);
     ProcessRequest(HttpRequest);
 }
 
 ///////////////////////////// CALLBACKS /////////////////////////////
 
-void UOpenAIProvider::OnListModelsCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
-{
-    HandleResponse<FListModelsResponse>(Response, WasSuccessful, ListModelsCompleted);
-}
-
-void UOpenAIProvider::OnRetrieveModelCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
-{
-    HandleResponse<FRetrieveModelResponse>(Response, WasSuccessful, RetrieveModelCompleted);
-}
+#define DEFINE_HTTP_CALLBACK(Name)                                                                                    \
+    void UOpenAIProvider::On##Name##Completed(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful) \
+    {                                                                                                                 \
+        HandleResponse<F##Name##Response>(Response, WasSuccessful, Name##Completed);                                  \
+    }
+DEFINE_HTTP_CALLBACK(ListModels)
+DEFINE_HTTP_CALLBACK(RetrieveModel)
+DEFINE_HTTP_CALLBACK(DeleteFineTunedModel)
 
 void UOpenAIProvider::OnCreateCompletionCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
 {
@@ -346,7 +472,7 @@ void UOpenAIProvider::OnCreateCompletionStreamCompleted(FHttpRequestPtr Request,
     OnStreamCompleted<FCompletionStreamResponse>(Request, Response, WasSuccessful, CreateCompletionStreamCompleted);
 }
 
-void UOpenAIProvider::OnCreateCompletionStreamProgress(FHttpRequestPtr Request, int32 BytesSent, int32 BytesReceived)
+void UOpenAIProvider::OnCreateCompletionStreamProgress(FHttpRequestPtr Request, uint64 BytesSent, uint64 BytesReceived)
 {
     OnStreamProgress<FCompletionStreamResponse>(Request, BytesSent, BytesReceived, CreateCompletionStreamProgresses);
 }
@@ -361,71 +487,79 @@ void UOpenAIProvider::OnCreateChatCompletionStreamCompleted(FHttpRequestPtr Requ
     OnStreamCompleted<FChatCompletionStreamResponse>(Request, Response, WasSuccessful, CreateChatCompletionStreamCompleted);
 }
 
-void UOpenAIProvider::OnCreateChatCompletionStreamProgress(FHttpRequestPtr Request, int32 BytesSent, int32 BytesReceived)
+void UOpenAIProvider::OnCreateChatCompletionStreamProgress(FHttpRequestPtr Request, uint64 BytesSent, uint64 BytesReceived)
 {
     OnStreamProgress<FChatCompletionStreamResponse>(Request, BytesSent, BytesReceived, CreateChatCompletionStreamProgresses);
 }
 
 void UOpenAIProvider::OnCreateImageCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
 {
+    if (!Request.IsValid())
+    {
+        LogError("OnCreateImageCompleted: Request object is invalid!");
+        Log(FString::Format(TEXT("OnCreateImageCompleted: Request URL: {0}"), {Request->GetURL()}));
+        Log(FString::Format(TEXT("OnCreateImageCompleted: Request Verb: {0}"), {Request->GetVerb()}));
+        Log(FString::Format(TEXT("OnCreateImageCompleted: Request Status: {0}"), {EHttpRequestStatus::ToString(Request->GetStatus())}));
+        Log(FString::Format(TEXT("OnCreateImageCompleted: Request Elapsed Time: {0} seconds"), {Request->GetElapsedTime()}));
+        return;
+    }
+
     if (!Success(Response, WasSuccessful)) return;
 
     FImageResponse ImageResponse;
-    if (ParseImageRequest(Response, ImageResponse))
+    const FString Content = Response.IsValid() ? Response->GetContentAsString() : FString{};
+    const FString ResponseURL = Response.IsValid() ? Response->GetURL() : FString{};
+    const bool Status = ImageParser::DeserializeResponse(Content, ImageResponse);
+
+    if (!Status || ImageResponse.Data.Num() == 0)
     {
-        CreateImageCompleted.Broadcast(ImageResponse);
+        LogError("Failed to parse image response");
+        LogError(Content);
+        RequestError.Broadcast(ResponseURL, Content);
+        return;
     }
+
+    CreateImageCompleted.Broadcast(ImageResponse, GetResponseHeaders(Response));
 }
 
 void UOpenAIProvider::OnCreateImageEditCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
 {
     if (!Success(Response, WasSuccessful)) return;
 
+    const FString Content = Response ? Response->GetContentAsString() : FString{};
+    const FString ResponseURL = Response ? Response->GetURL() : FString{};
+
     FImageEditResponse ImageEditResponse;
-    if (ParseImageRequest(Response, ImageEditResponse))
+    const bool Status = ImageParser::DeserializeResponse(Content, ImageEditResponse);
+
+    if (!Status || ImageEditResponse.Data.Num() == 0)
     {
-        CreateImageEditCompleted.Broadcast(ImageEditResponse);
+        LogError("Failed to parse image edit response");
+        LogError(Content);
+        RequestError.Broadcast(ResponseURL, Content);
+        return;
     }
+    CreateImageEditCompleted.Broadcast(ImageEditResponse, GetResponseHeaders(Response));
 }
 
 void UOpenAIProvider::OnCreateImageVariationCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
 {
     if (!Success(Response, WasSuccessful)) return;
 
+    const FString Content = Response.IsValid() ? Response->GetContentAsString() : FString{};
+    const FString ResponseURL = Response.IsValid() ? Response->GetURL() : FString{};
+
     FImageVariationResponse ImageVariationResponse;
-    if (ParseImageRequest(Response, ImageVariationResponse))
+    const bool Status = ImageParser::DeserializeResponse(Content, ImageVariationResponse);
+
+    if (!Status || ImageVariationResponse.Data.Num() == 0)
     {
-        CreateImageVariationCompleted.Broadcast(ImageVariationResponse);
+        LogError("Failed to parse image variation response");
+        LogError(Content);
+        RequestError.Broadcast(ResponseURL, Content);
+        return;
     }
-}
-
-bool UOpenAIProvider::ParseImageRequest(FHttpResponsePtr Response, FImageResponse& ImageResponse)
-{
-    TSharedRef<TJsonReader<>> JsonReader = TJsonReaderFactory<>::Create(Response->GetContentAsString());
-    TSharedPtr<FJsonObject> JsonObject;
-    FJsonSerializer::Deserialize(JsonReader, JsonObject);
-
-    ImageResponse.Created = JsonObject->GetNumberField("created");
-
-    const auto& DataArray = JsonObject->GetArrayField("data");
-    for (const auto& DataElem : DataArray)
-    {
-        FImageObject ImageObject;
-        if (FJsonObjectConverter::JsonObjectToUStruct(DataElem->AsObject().ToSharedRef(), &ImageObject, 0, 0))
-        {
-            ImageResponse.Data.Push(ImageObject);
-        }
-    }
-
-    if (ImageResponse.Data.Num() == 0)
-    {
-        LogError("JSON deserialization error");
-        LogError(Response->GetContentAsString());
-        RequestError.Broadcast(Response->GetURL(), Response->GetContentAsString());
-        return false;
-    }
-
-    return true;
+    CreateImageVariationCompleted.Broadcast(ImageVariationResponse, GetResponseHeaders(Response));
 }
 
 void UOpenAIProvider::OnCreateEmbeddingsCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
@@ -439,7 +573,7 @@ void UOpenAIProvider::OnCreateSpeechCompleted(FHttpRequestPtr Request, FHttpResp
     {
         FSpeechResponse SpeechResponse;
         SpeechResponse.Bytes = Response->GetContent();  //@todo move semantics needed
-        CreateSpeechCompleted.Broadcast(SpeechResponse);
+        CreateSpeechCompleted.Broadcast(SpeechResponse, GetResponseHeaders(Response));
     }
     else
     {
@@ -450,7 +584,14 @@ void UOpenAIProvider::OnCreateSpeechCompleted(FHttpRequestPtr Request, FHttpResp
 
 void UOpenAIProvider::OnCreateAudioTranscriptionCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
 {
-    HandleResponse<FAudioTranscriptionResponse>(Response, WasSuccessful, CreateAudioTranscriptionCompleted);
+    if (Response.IsValid() && AudioParser::IsVerboseResponse(Response->GetContentAsString()))
+    {
+        HandleResponse<FAudioTranscriptionVerboseResponse>(Response, WasSuccessful, CreateAudioTranscriptionVerboseCompleted);
+    }
+    else
+    {
+        HandleResponse<FAudioTranscriptionResponse>(Response, WasSuccessful, CreateAudioTranscriptionCompleted);
+    }
 }
 
 void UOpenAIProvider::OnCreateAudioTranslationCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
@@ -458,91 +599,44 @@ void UOpenAIProvider::OnCreateAudioTranslationCompleted(FHttpRequestPtr Request,
     HandleResponse<FAudioTranslationResponse>(Response, WasSuccessful, CreateAudioTranslationCompleted);
 }
 
-void UOpenAIProvider::OnListFilesCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
-{
-    HandleResponse<FListFilesResponse>(Response, WasSuccessful, ListFilesCompleted);
-}
-
-void UOpenAIProvider::OnUploadFileCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
-{
-    HandleResponse<FUploadFileResponse>(Response, WasSuccessful, UploadFileCompleted);
-}
-
-void UOpenAIProvider::OnDeleteFileCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
-{
-    HandleResponse<FDeleteFileResponse>(Response, WasSuccessful, DeleteFileCompleted);
-}
-
-void UOpenAIProvider::OnRetrieveFileCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
-{
-    HandleResponse<FRetrieveFileResponse>(Response, WasSuccessful, RetrieveFileCompleted);
-}
+DEFINE_HTTP_CALLBACK(ListFiles)
+DEFINE_HTTP_CALLBACK(UploadFile)
+DEFINE_HTTP_CALLBACK(DeleteFile)
+DEFINE_HTTP_CALLBACK(RetrieveFile)
 
 void UOpenAIProvider::OnRetrieveFileContentCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
 {
+    const FString Content = Response.IsValid() ? Response->GetContentAsString() : FString{};
+    const FString ResponseURL = Response.IsValid() ? Response->GetURL() : FString{};
+
     if (!WasSuccessful)
     {
-        RequestError.Broadcast(Response->GetURL(), Response->GetContentAsString());
+        RequestError.Broadcast(ResponseURL, Content);
         return;
     }
 
     FRetrieveFileContentResponse ParsedResponse;
-    ParsedResponse.Content = Response->GetContentAsString();
-    RetrieveFileContentCompleted.Broadcast(ParsedResponse);
+    ParsedResponse.Content = Content;
+    RetrieveFileContentCompleted.Broadcast(ParsedResponse, GetResponseHeaders(Response));
 }
 
 void UOpenAIProvider::OnCreateModerationsCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
 {
     if (!Success(Response, WasSuccessful)) return;
 
-    TSharedRef<TJsonReader<>> JsonReader = TJsonReaderFactory<>::Create(Response->GetContentAsString());
-    TSharedPtr<FJsonObject> JsonObject;
-    if (!FJsonSerializer::Deserialize(JsonReader, JsonObject)) return;
+    const FString Content = Response.IsValid() ? Response->GetContentAsString() : FString{};
+    const FString ResponseURL = Response.IsValid() ? Response->GetURL() : FString{};
 
-    FModerationsResponse ParsedResponse;
-    ParsedResponse.ID = JsonObject->GetStringField("id");
-    ParsedResponse.Model = JsonObject->GetStringField("Model");
-
-    const auto& ResultsObject = JsonObject->GetArrayField("results");
-    for (const auto& ResultObject : ResultsObject)
+    FModerationsResponse ModerationResponse;
+    const bool Status = ModerationParser::DeserializeResponse(Content, ModerationResponse);
+    if (!Status)
     {
-        const auto& CategoriesObject = ResultObject->AsObject()->GetObjectField("categories");
-        FModerationCategories Categories;
-        Categories.Hate = CategoriesObject->GetBoolField("hate");
-        Categories.Hate_Threatening = CategoriesObject->GetBoolField("hate/threatening");
-        Categories.Self_Harm = CategoriesObject->GetBoolField("self-harm");
-        Categories.Sexual = CategoriesObject->GetBoolField("sexual");
-        Categories.Sexual_Minors = CategoriesObject->GetBoolField("sexual/minors");
-        Categories.Violence = CategoriesObject->GetBoolField("violence");
-        Categories.Violence_Graphic = CategoriesObject->GetBoolField("violence/graphic");
-
-        const auto& CategoryScoreObject = ResultObject->AsObject()->GetObjectField("category_scores");
-        FModerationScores CategoryScores;
-        CategoryScores.Hate = CategoryScoreObject->GetNumberField("hate");
-        CategoryScores.Hate_Threatening = CategoryScoreObject->GetNumberField("hate/threatening");
-        CategoryScores.Self_Harm = CategoryScoreObject->GetNumberField("self-harm");
-        CategoryScores.Sexual = CategoryScoreObject->GetNumberField("sexual");
-        CategoryScores.Sexual_Minors = CategoryScoreObject->GetNumberField("sexual/minors");
-        CategoryScores.Violence = CategoryScoreObject->GetNumberField("violence");
-        CategoryScores.Violence_Graphic = CategoryScoreObject->GetNumberField("violence/graphic");
-
-        FModerationResults ModerationResults;
-        ModerationResults.Categories = Categories;
-        ModerationResults.Category_Scores = CategoryScores;
-        ModerationResults.Flagged = ResultObject->AsObject()->GetBoolField("flagged");
-        ParsedResponse.Results.Add(ModerationResults);
+        LogError("Failed to parse moderations response");
+        RequestError.Broadcast(ResponseURL, Content);
+        return;
     }
 
-    CreateModerationsCompleted.Broadcast(ParsedResponse);
-}
-
-void UOpenAIProvider::OnListFineTuneEventsCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
-{
-    HandleResponse<FFineTuneEventsResponse>(Response, WasSuccessful, ListFineTuneEventsCompleted);
-}
-void UOpenAIProvider::OnDeleteFineTunedModelCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
-{
-    HandleResponse<FDeleteFineTuneResponse>(Response, WasSuccessful, DeleteFineTunedModelCompleted);
+    CreateModerationsCompleted.Broadcast(ModerationResponse, GetResponseHeaders(Response));
 }
 
 void UOpenAIProvider::OnCreateFineTuningJobCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
@@ -550,10 +644,9 @@ void UOpenAIProvider::OnCreateFineTuningJobCompleted(FHttpRequestPtr Request, FH
     HandleResponse<FFineTuningJobObjectResponse>(Response, WasSuccessful, CreateFineTuningJobCompleted);
 }
 
-void UOpenAIProvider::OnListFineTuningJobsCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
-{
-    HandleResponse<FListFineTuningJobsResponse>(Response, WasSuccessful, ListFineTuningJobsCompleted);
-}
+DEFINE_HTTP_CALLBACK(ListFineTuningJobs)
+DEFINE_HTTP_CALLBACK(ListFineTuningEvents)
+DEFINE_HTTP_CALLBACK(ListFineTuningCheckpoints)
 
 void UOpenAIProvider::OnRetrieveFineTuningJobCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
 {
@@ -565,10 +658,49 @@ void UOpenAIProvider::OnCancelFineTuningJobCompleted(FHttpRequestPtr Request, FH
     HandleResponse<FFineTuningJobObjectResponse>(Response, WasSuccessful, CancelFineTuningJobCompleted);
 }
 
-void UOpenAIProvider::OnListFineTuningEventsCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
+DEFINE_HTTP_CALLBACK(CreateBatch)
+DEFINE_HTTP_CALLBACK(RetrieveBatch)
+DEFINE_HTTP_CALLBACK(CancelBatch)
+DEFINE_HTTP_CALLBACK(ListBatch)
+
+void UOpenAIProvider::OnCreateUploadCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
 {
-    HandleResponse<FFineTuningJobEventResponse>(Response, WasSuccessful, ListFineTuningEventsCompleted);
+    HandleResponse<FUploadObjectResponse>(Response, WasSuccessful, CreateUploadCompleted);
 }
+
+void UOpenAIProvider::OnAddUploadPartCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
+{
+    HandleResponse<FUploadPartObjectResponse>(Response, WasSuccessful, AddUploadPartCompleted);
+}
+
+void UOpenAIProvider::OnCompleteUploadCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
+{
+    HandleResponse<FUploadObjectResponse>(Response, WasSuccessful, CompleteUploadCompleted);
+}
+
+void UOpenAIProvider::OnCancelUploadCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
+{
+    HandleResponse<FUploadObjectResponse>(Response, WasSuccessful, CancelUploadCompleted);
+}
+
+void UOpenAIProvider::OnCreateAssistantCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
+{
+    HandleResponse<FAssistantObjectResponse>(Response, WasSuccessful, CreateAssistantCompleted);
+}
+
+DEFINE_HTTP_CALLBACK(ListAssistants)
+
+void UOpenAIProvider::OnRetrieveAssistantCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
+{
+    HandleResponse<FAssistantObjectResponse>(Response, WasSuccessful, RetrieveAssistantCompleted);
+}
+
+void UOpenAIProvider::OnModifyAssistantCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
+{
+    HandleResponse<FAssistantObjectResponse>(Response, WasSuccessful, ModifyAssistantCompleted);
+}
+
+DEFINE_HTTP_CALLBACK(DeleteAssistant)
 
 ///////////////////////////// HELPER FUNCTIONS /////////////////////////////
 
@@ -576,38 +708,39 @@ void UOpenAIProvider::ProcessRequest(FHttpRequestRef HttpRequest)
 {
     if (bLogEnabled)
     {
-        UE_LOG(LogOpenAIProvider, Display, TEXT("Request processing started: %s"), *HttpRequest->GetURL());
+        UE_LOGFMT(LogOpenAIProvider, Display, "Request processing started: {0} {1}", HttpRequest->GetVerb(), HttpRequest->GetURL());
     }
 
     if (!HttpRequest->ProcessRequest())
     {
-        LogError(FString::Printf(TEXT("Can't process %s"), *HttpRequest->GetURL()));
+        LogError(FString::Format(TEXT("Can't process: {0}"), {HttpRequest->GetURL()}));
         RequestError.Broadcast(HttpRequest->GetURL(), {});
     }
 }
 
 bool UOpenAIProvider::Success(FHttpResponsePtr Response, bool WasSuccessful)
 {
-    if (!Response)
+    if (!Response.IsValid())
     {
-        LogError("Response is nullptr");
+        LogError(FString::Format(TEXT("Response is nullptr, WasSuccessful: {0}"), {WasSuccessful ? TEXT("true") : TEXT("false")}));
         RequestError.Broadcast("null", "null");
         return false;
     }
 
-    TSharedRef<TJsonReader<>> JsonReader = TJsonReaderFactory<>::Create(Response->GetContentAsString());
+    const FString Content = Response->GetContentAsString();
+    TSharedRef<TJsonReader<>> JsonReader = TJsonReaderFactory<>::Create(Content);
     TSharedPtr<FJsonObject> JsonObject;
     if (!FJsonSerializer::Deserialize(JsonReader, JsonObject))
     {
-        LogError("JSON deserialization error");
-        RequestError.Broadcast(Response->GetURL(), Response->GetContentAsString());
+        LogError(FString::Format(TEXT("JSON deserialization error: {0}"), {Content}));
+        RequestError.Broadcast(Response->GetURL(), Content);
         return false;
     }
 
-    if (!WasSuccessful || !JsonObject.IsValid() /*|| JsonObject->HasField("error")*/)
+    if (!WasSuccessful || !JsonObject.IsValid() || UJsonFuncLib::OpenAIResponseContainsError(JsonObject))
     {
-        LogError(Response->GetContentAsString());
-        RequestError.Broadcast(Response->GetURL(), Response->GetContentAsString());
+        LogError(Content);
+        RequestError.Broadcast(Response->GetURL(), Content);
         return false;
     }
 
@@ -615,24 +748,31 @@ bool UOpenAIProvider::Success(FHttpResponsePtr Response, bool WasSuccessful)
     return true;
 }
 
-void UOpenAIProvider::LogResponse(FHttpResponsePtr Response)
+void UOpenAIProvider::Log(const FString& Info) const
 {
     if (bLogEnabled)
     {
-        UE_LOG(LogOpenAIProvider, Display, TEXT("Request URL: %s"), *Response->GetURL());
-        UE_LOG(LogOpenAIProvider, Display, TEXT("%s"), *Response->GetContentAsString());
+        UE_LOGFMT(LogOpenAIProvider, Display, "{0}", Info);
     }
 }
 
-void UOpenAIProvider::LogError(const FString& ErrorText)
+void UOpenAIProvider::LogResponse(FHttpResponsePtr Response) const
 {
-    UE_LOG(LogOpenAIProvider, Error, TEXT("%s"), *ErrorText);
+    if (bLogEnabled)
+    {
+        UE_LOGFMT(LogOpenAIProvider, Display, "Response. Request URL: {0}", Response.IsValid() ? Response->GetURL() : FString{});
+        UE_LOGFMT(LogOpenAIProvider, Display, "Response. Content: {0}", Response.IsValid() ? Response->GetContentAsString() : FString{});
+    }
+}
+
+void UOpenAIProvider::LogError(const FString& ErrorText) const
+{
+    UE_LOGFMT(LogOpenAIProvider, Error, "{0}", ErrorText);
 }
 
 void UOpenAIProvider::SetOptional(TSharedPtr<FJsonObject> RequestBody, const TOptional<FString>& Param, const FString& ParamName)
 {
     if (!Param.IsSet()) return;
-
     RequestBody->SetStringField(ParamName, Param.GetValue());
 }
 
@@ -656,40 +796,21 @@ void UOpenAIProvider::SetOptional(TSharedPtr<FJsonObject> RequestBody, const TOp
 
 TTuple<FString, FString> UOpenAIProvider::GetErrorData(FHttpRequestPtr Request, FHttpResponsePtr Response) const
 {
-    const auto Content = Response->GetContentAsString();
-    if (!Content.IsEmpty())
+    const auto ResponseContent = Response ? Response->GetContentAsString() : FString{};
+    const auto ResponseURL = Response ? Response->GetURL() : FString{};
+
+    if (!ResponseContent.IsEmpty())
     {
-        return MakeTuple(Response->GetURL(), Response->GetContentAsString());
+        return MakeTuple(ResponseURL, ResponseContent);
     }
 
-    const auto Status = EHttpRequestStatus::ToString(Request->GetStatus());
-    return MakeTuple(Response->GetURL(), Status);
-}
-
-bool UOpenAIProvider::HandleString(FString& IncomeString, bool& LastString) const
-{
-    if (IncomeString.StartsWith("data: "))
-    {
-        IncomeString.RemoveFromStart("data: ");
-    }
-
-    // igone role chunck // @todo handle this case in another struct
-    // if (IncomeString.Find("role") != INDEX_NONE) return false;
-    if (IncomeString.Equals("[DONE]"))
-    {
-        LastString = true;
-    }
-
-    return true;
+    const auto Status = Request ? EHttpRequestStatus::ToString(Request->GetStatus()) : FString{};
+    return MakeTuple(ResponseURL, Status);
 }
 
 FHttpRequestRef UOpenAIProvider::MakeRequest(const FString& URL, const FString& Method, const FOpenAIAuth& Auth) const
 {
-    auto HttpRequest = CreateRequest();
-    HttpRequest->SetHeader("Content-Type", "application/json");
-    HttpRequest->SetHeader("Authorization", FString("Bearer ").Append(Auth.APIKey));
-    HttpRequest->SetHeader("OpenAI-Organization", Auth.OrganizationID);
-    HttpRequest->SetHeader("OpenAI-Project", Auth.ProjectID);
+    auto HttpRequest = MakeRequestHeaders(Auth);
     HttpRequest->SetURL(URL);
     HttpRequest->SetVerb(Method);
     return HttpRequest;
@@ -698,93 +819,35 @@ FHttpRequestRef UOpenAIProvider::MakeRequest(const FString& URL, const FString& 
 FHttpRequestRef UOpenAIProvider::MakeRequest(
     const FChatCompletion& ChatCompletion, const FString& URL, const FString& Method, const FOpenAIAuth& Auth) const
 {
+    auto HttpRequest = MakeRequestHeaders(Auth);
+    HttpRequest->SetURL(URL);
+    HttpRequest->SetVerb(Method);
+
+    const FString RequestBodyStr = ChatParser::ChatCompletionToJsonRepresentation(ChatCompletion);
+    Log(FString("Postprocessed content was set as: ").Append(RequestBodyStr));
+    HttpRequest->SetContentAsString(RequestBodyStr);
+
+    return HttpRequest;
+}
+
+FHttpRequestRef UOpenAIProvider::MakeRequestHeaders(const FOpenAIAuth& Auth) const
+{
     auto HttpRequest = CreateRequest();
     HttpRequest->SetHeader("Content-Type", "application/json");
     HttpRequest->SetHeader("Authorization", FString("Bearer ").Append(Auth.APIKey));
     HttpRequest->SetHeader("OpenAI-Organization", Auth.OrganizationID);
     HttpRequest->SetHeader("OpenAI-Project", Auth.ProjectID);
-    HttpRequest->SetURL(URL);
-    HttpRequest->SetVerb(Method);
-
-    TSharedPtr<FJsonObject> Json = FJsonObjectConverter::UStructToJsonObject(ChatCompletion);
-    CleanChatCompletionFieldsThatCantBeEmpty(ChatCompletion, Json);
-
-    FString RequestBodyStr;
-    UOpenAIFuncLib::JsonToString(Json, RequestBodyStr);
-    RequestBodyStr = UOpenAIFuncLib::CleanUpFunctionsObject(RequestBodyStr);
-
-    HttpRequest->SetContentAsString(RequestBodyStr);
     return HttpRequest;
 }
 
-void UOpenAIProvider::CleanChatCompletionFieldsThatCantBeEmpty(const FChatCompletion& ChatCompletion, TSharedPtr<FJsonObject>& Json) const
+FOpenAIResponseMetadata UOpenAIProvider::GetResponseHeaders(FHttpResponsePtr Response) const
 {
-    if (ChatCompletion.Tools.IsEmpty())
+    FOpenAIResponseMetadata Metadata;
+    if (Response.IsValid() && Response->GetStatus() != EHttpRequestStatus::Processing)
     {
-        Json->RemoveField("Tools");
+        Metadata.HttpHeaders = Response->GetAllHeaders();
     }
-
-    if (ChatCompletion.Tool_Choice.Function.Name.IsEmpty())
-    {
-        Json->RemoveField("Tool_Choice");
-    }
-
-    if (ChatCompletion.Stop.IsEmpty())
-    {
-        Json->RemoveField("Stop");
-    }
-
-    if (ChatCompletion.Logit_Bias.IsEmpty())
-    {
-        Json->RemoveField("Logit_Bias");
-    }
-
-    if (ChatCompletion.Model == UOpenAIFuncLib::OpenAIAllModelToString(EAllModelEnum::GPT_4_Vision_Preview))
-    {
-        Json->RemoveField("Response_Format");
-    }
-
-    for (int32 i = 0; i < ChatCompletion.Messages.Num(); ++i)
-    {
-        const auto& Message = ChatCompletion.Messages[i];
-        auto& MessageObj = Json->GetArrayField("Messages")[i]->AsObject();
-
-        if (Message.Tool_Calls.IsEmpty())
-        {
-            MessageObj->RemoveField("Tool_Calls");
-        }
-        if (Message.Tool_Call_ID.IsEmpty())
-        {
-            MessageObj->RemoveField("Tool_Call_ID");
-        }
-        if (Message.Name.IsEmpty())
-        {
-            MessageObj->RemoveField("Name");
-        }
-        if (Message.ContentArray.IsEmpty())
-        {
-            MessageObj->RemoveField("ContentArray");
-        }
-        else
-        {
-            auto Content = MessageObj->GetArrayField("ContentArray");
-
-            for (int32 j = 0; j < Content.Num(); ++j)
-            {
-                TSharedPtr<FJsonObject> MessageContent = Content[j]->AsObject();
-                if (MessageContent->GetStringField("Type").Equals("text"))
-                {
-                    MessageContent->RemoveField("Image_URL");
-                }
-                else
-                {
-                    MessageContent->RemoveField("Text");
-                }
-            }
-            MessageObj->SetArrayField("Content", Content);
-            MessageObj->RemoveField("ContentArray");
-        }
-    }
+    return {};
 }
 
 PRAGMA_ENABLE_DEPRECATION_WARNINGS

@@ -5,10 +5,16 @@
 #if WITH_AUTOMATION_TESTS
 
 #include "TestUtils.h"
-#include "FuncLib\ModelTypes.h"
+#include "Provider/Types/ModelTypes.h"
 #include "Internationalization/Regex.h"
+#include "FuncLib/OpenAIFuncLib.h"
 
 using namespace OpenAI::Tests;
+
+bool FWaitForRequestCompleted::Update()
+{
+    return RequestCompleted;
+}
 
 FString TestUtils::RemovePunctuation(const FString& Input)
 {
@@ -42,6 +48,13 @@ FString TestUtils::PluginEnumToOpenAIModelName(EAllModelEnum PluginEnum)
 
     // special case: gpt-3-5-turbo-0301 -> gpt-3.5-turbo-0301
     EnumElementName = EnumElementName.Replace(TEXT("3-5"), TEXT("3.5"));
+    EnumElementName = EnumElementName.Replace(TEXT("4-5"), TEXT("4.5"));
+    // don't like it, but there are a problems with model names like GPT_4_1106_Preview .... facepalm naming conventions...
+    EnumElementName = EnumElementName.Replace(TEXT("gpt-4-1-"), TEXT("gpt-4.1-"));
+    if (EnumElementName.Equals(TEXT("gpt-4-1")))
+    {
+        EnumElementName = TEXT("gpt-4.1");
+    }
 
     return EnumElementName;
 }
@@ -53,6 +66,13 @@ FString TestUtils::OpenAIModelNameToPluginEnum(const FString& ModelName)
 
     // special case: gpt-3.5-turbo-0301 -> gpt_3_5_turbo_0301
     EnumName = EnumName.Replace(TEXT("3.5"), TEXT("3_5"));
+    EnumName = EnumName.Replace(TEXT("4.5"), TEXT("4_5"));
+    // don't like it, but there are a problems with model names like GPT_4_1106_Preview .... facepalm naming conventions...
+    EnumName = EnumName.Replace(TEXT("gpt_4.1_"), TEXT("gpt_4_1_"));
+    if (EnumName.Equals(TEXT("gpt_4.1")))
+    {
+        EnumName = TEXT("gpt_4_1");
+    }
 
     // gpt-3.5-turbo-0301 -> GPT_3_5_turbo_0301
     EnumName = EnumName.Replace(TEXT("gpt"), TEXT("GPT"));
@@ -79,7 +99,9 @@ FString TestUtils::OpenAIModelNameToPluginEnum(const FString& ModelName)
 
 FString TestUtils::FileFullPath(const FString& FileName)
 {
-    return FPaths::ConvertRelativePathToFull(FPaths::ProjectPluginsDir().Append("OpenAI/Source/OpenAITestRunner/Data/").Append(FileName));
+    const FString RelativeFilePath = FPaths::Combine(FPaths::ProjectPluginsDir(),  //
+        TEXT("OpenAI"), TEXT("Source"), TEXT("OpenAITestRunner"), TEXT("Data"), FileName);
+    return FPaths::ConvertRelativePathToFull(RelativeFilePath);
 }
 
 bool TestUtils::IsValidURL(const FString& URL)
@@ -89,6 +111,16 @@ bool TestUtils::IsValidURL(const FString& URL)
     FRegexMatcher Matcher(Pattern, URL);
 
     return Matcher.FindNext();
+}
+
+bool TestUtils::TestFinishReason(const FString& Reason)
+{
+    const TSet<FString> FinishReson{UOpenAIFuncLib::OpenAIFinishReasonToString(EOpenAIFinishReason::Stop),
+        UOpenAIFuncLib::OpenAIFinishReasonToString(EOpenAIFinishReason::Length),
+        UOpenAIFuncLib::OpenAIFinishReasonToString(EOpenAIFinishReason::Tool_Calls),
+        UOpenAIFuncLib::OpenAIFinishReasonToString(EOpenAIFinishReason::Content_Filter),
+        UOpenAIFuncLib::OpenAIFinishReasonToString(EOpenAIFinishReason::Null)};
+    return FinishReson.Contains(Reason);
 }
 
 #endif

@@ -9,6 +9,7 @@ UDeleteFileAction* UDeleteFileAction::DeleteFile(const FString& FileID, const FO
     auto* DeleteFileAction = NewObject<UDeleteFileAction>();
     DeleteFileAction->FileID = FileID;
     DeleteFileAction->Auth = Auth;
+    DeleteFileAction->URLOverride = URLOverride;
     return DeleteFileAction;
 }
 
@@ -21,14 +22,14 @@ void UDeleteFileAction::Activate()
     Provider->DeleteFile(FileID, Auth);
 }
 
-void UDeleteFileAction::OnDeleteFileCompleted(const FDeleteFileResponse& Response)
+void UDeleteFileAction::OnDeleteFileCompleted(const FDeleteFileResponse& Response, const FOpenAIResponseMetadata& ResponseMetadata)
 {
-    OnCompleted.Broadcast(Response, {});
+    OnCompleted.Broadcast(Response, ResponseMetadata, {});
 }
 
 void UDeleteFileAction::OnRequestError(const FString& URL, const FString& Content)
 {
-    OnCompleted.Broadcast({}, FOpenAIError{Content, true});
+    OnCompleted.Broadcast({}, {}, FOpenAIError{Content, true});
 }
 
 void UDeleteFileAction::TryToOverrideURL(UOpenAIProvider* Provider)

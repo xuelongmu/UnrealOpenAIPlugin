@@ -1,42 +1,49 @@
 ﻿
 # Complete Unreal Engine plugin for the OpenAI API
 
+This is an unofficial community-maintained library.
+
 ![](https://raw.githubusercontent.com/life-exe/UnrealOpenAIPlugin/master/Media/logo.png)
 
 This plugin is a comprehensive Unreal Engine wrapper for the OpenAI API. It supports all OpenAI endpoints, including:
  - [Models](https://platform.openai.com/docs/api-reference/models)
  - [Completions](https://platform.openai.com/docs/api-reference/completions)
  - [Chat](https://platform.openai.com/docs/api-reference/chat)
- - [Images (DALL·E 3, DALL·E 2)](https://platform.openai.com/docs/api-reference/images)
+ - [Images (GPT-Image-1, DALL·E 3, DALL·E 2)](https://platform.openai.com/docs/api-reference/images)
  - [Vision](https://platform.openai.com/docs/guides/vision)
  - [Embeddings](https://platform.openai.com/docs/api-reference/embeddings)
+ - [Batch](https://platform.openai.com/docs/api-reference/batch)
  - [Speech](https://platform.openai.com/docs/api-reference/audio/createSpeech)
  - [Audio](https://platform.openai.com/docs/api-reference/audio)
  - [Files](https://platform.openai.com/docs/api-reference/files)
+ - [Uploads](https://platform.openai.com/docs/api-reference/uploads)
  - [Moderations](https://platform.openai.com/docs/api-reference/moderations)
  - [Fine-tuning](https://platform.openai.com/docs/api-reference/fine-tuning)
  - [Functions](https://platform.openai.com/docs/guides/function-calling)
+ - [Debugging requests](https://platform.openai.com/docs/api-reference/debugging-requests)
 
 All requests are available in both C++ and Blueprints:
 ```cpp
 void AAPIOverview::CreateImage()
 {
-    auto* Provider = NewObject<UOpenAIProvider>();
-    Provider->SetLogEnabled(false);
+    Provider->SetLogEnabled(true);
     Provider->OnRequestError().AddUObject(this, &ThisClass::OnRequestError);
     Provider->OnCreateImageCompleted().AddLambda(
-        [](const FImageResponse& Response)
+        [](const FImageResponse& Response, const FOpenAIResponseMetadata& Metadata)
         {
-            FString OutputString{};
-            Algo::ForEach(Response.Data, [&](const FString& Data) { OutputString.Append(Data).Append(LINE_TERMINATOR); });
-            UE_LOG(LogAPIOverview, Display, TEXT("%s"), *OutputString);
+            auto* ArtTexture = UImageFuncLib::Texture2DFromBytes(Response.Data[0].B64_JSON);
+            UE_LOGFMT(LogAPIOverview, Display, "{0}", Response.Data[0].B64_JSON);
         });
 
-    FOpenAIImage Image;
-    Image.Prompt = "Tiger is eating pizza";
-    Image.Size = UOpenAIFuncLib::OpenAIImageSizeToString(EImageSize::Size_512x512);
-    Image.Response_Format = UOpenAIFuncLib::OpenAIImageFormatToString(EOpenAIImageFormat::URL);
-    Image.N = 2;
+    FOpenAIImage OpenAIImage;
+    OpenAIImage.Model = UOpenAIFuncLib::OpenAIImageModelToString(EImageModelEnum::GPT_Image_1);
+    OpenAIImage.N = 1;
+    OpenAIImage.Prompt = "Bear with beard drinking beer";
+    OpenAIImage.Size = UOpenAIFuncLib::OpenAIImageSizeGptImage1ToString(EImageSizeGptImage1::Size_1024x1024);
+    OpenAIImage.Background.Set(UOpenAIFuncLib::OpenAIImageBackgroundToString(EOpenAIImageBackground::Transparent));
+    OpenAIImage.Moderation.Set(UOpenAIFuncLib::OpenAIImageModerationToString(EOpenAIImageModeration::Low));
+    OpenAIImage.Quality.Set(UOpenAIFuncLib::OpenAIImageQualityToString(EOpenAIImageQuality::Low));
+    OpenAIImage.Output_Format.Set(UOpenAIFuncLib::OpenAIImageOutputFormatToString(EOpenAIImageOutputFormat::Png));
 
     Provider->CreateImage(Image, Auth);
 }
@@ -46,7 +53,7 @@ void AAPIOverview::CreateImage()
 
 ## Supported Unreal Engine Versions
 
- - Unreal Engine 5.3 (master), 5.2
+ - Unreal Engine 5.5 (master), 5.4, 5.3, 5.2
 
 ## Tutorials
  - [Plugin overview and usage example](https://youtu.be/SkiWQXHjk30) [English subtitles].
@@ -54,6 +61,12 @@ void AAPIOverview::CreateImage()
  - [DALLE 3 | Text To Speech | Vision](https://youtu.be/l4hcCbAceXs) [English subtitles].
 
 ## Updates
+ - [Add gpt-image-1 model, image API update](https://openai.com/index/image-generation-api)
+
+ ![](https://raw.githubusercontent.com/life-exe/UnrealOpenAIPlugin/master/Media/gpt_image_1.png)
+
+ ![](https://raw.githubusercontent.com/life-exe/UnrealOpenAIPlugin/master/Media/gpt_image_2.png)
+
  - [Add gpt-4o models](https://openai.com/index/hello-gpt-4o)
  - [Vision & Text To Speech Demo](https://life-exe.itch.io/openai-vision-demo)
 
@@ -79,9 +92,9 @@ void AAPIOverview::CreateImage()
 
 # Installation
 
-## Marketplace link
+## FAB link
 
-- [Complete OpenAI API plugin](https://www.unrealengine.com/marketplace/en-US/product/complete-openai-api-plugin)
+- [Complete OpenAI API plugin](https://www.fab.com/listings/8114dbc6-a497-438c-9b26-552534ab68b0)
 
 ## C++
 
@@ -376,8 +389,8 @@ LogOpenAIFuncLib: Error: Failed loading file: C:/_Projects/UE5/OpenAICpp/Build/W
 
 ## Limitations
 
- - ~~Chat GPT-4 models are not available for everyone via the API. You need to [request access](https://openai.com/waitlist/gpt-4-api) for it.~~ Chat GPT-4 models are now available for everyone. 
  - OpenAI hosts a variety of different models. Please [check the models](https://platform.openai.com/docs/models/model-endpoint-compatibility) that are compatible with the particular request.
+ - Some developers may need to [verify](https://help.openai.com/en/articles/10910291-api-organization-verification) their organization before being able to use the gpt-image-1 model. Please check the [organization settings⁠](https://platform.openai.com/settings/organization/general) to see if you already have access.
 
 ## Miscellaneous
 

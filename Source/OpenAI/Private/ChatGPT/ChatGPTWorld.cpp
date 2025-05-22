@@ -27,15 +27,24 @@ void AChatGPTWorld::SetAuth(const FOpenAIAuth& Auth)
     }
 }
 
+void AChatGPTWorld::SetModel(const FString& ModelName)
+{
+    if (ChatGPT)
+    {
+        ChatGPT->SetModel(ModelName);
+    }
+}
+
 void AChatGPTWorld::MakeRequest(const FMessage& Message)
 {
-    if (bIsInProgress) return;
+    if (bIsInProgress || !ChatGPT) return;
 
     bIsInProgress = true;
 
     ChatGPT->AddMessage(Message);
 
-    const auto AssistantMessage = FMessage{UOpenAIFuncLib::OpenAIRoleToString(ERole::Assistant), {}};
+    FMessage AssistantMessage = FMessage{};
+    AssistantMessage.Role = UOpenAIFuncLib::OpenAIRoleToString(ERole::Assistant);
     ChatGPT->SetAssistantMessage(AssistantMessage);
 
     ChatGPT->MakeRequest();

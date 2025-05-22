@@ -1,10 +1,11 @@
 // OpenAI, Copyright LifeEXE. All Rights Reserved.
 
 #include "ChatGPT/Services/Weather/WeatherService.h"
-#include "Provider/CommonTypes.h"
+#include "Provider/Types/CommonTypes.h"
 #include "FuncLib/OpenAIFuncLib.h"
-#include "Provider/RequestTypes.h"
+#include "FuncLib/JsonFuncLib.h"
 #include "Algo/ForEach.h"
+#include "Logging/StructuredLog.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWeatherService, All, All);
 
@@ -83,7 +84,7 @@ FString UWeatherService::MakeFunction() const
     RequiredArray.Add(MakeShareable(new FJsonValueString("unit")));
     MainObj->SetArrayField("required", RequiredArray);
 
-    return UOpenAIFuncLib::MakeFunctionsString(MainObj);
+    return UJsonFuncLib::MakeFunctionsString(MainObj);
 }
 
 void UWeatherService::Call(const TSharedPtr<FJsonObject>& Args, const FString& ToolIDIn)
@@ -110,48 +111,48 @@ bool UWeatherService::MakeRequestURL(const TSharedPtr<FJsonObject>& ArgsJson, FS
     // units = f    temperature: Fahrenheit
     // units = m    temperature: Celsius // m - metric system, if you, like me, have been wondering wtf m means (=
     FString Units{"m"};
-    if (ArgsJson->TryGetStringField("unit", Units))
+    if (ArgsJson->TryGetStringField(TEXT("unit"), Units))
     {
         Units = Units.ToLower().Equals("celsius") ? "m" : "f";
     }
 
     FString Location;
-    if (!ArgsJson->TryGetStringField("location", Location))
+    if (!ArgsJson->TryGetStringField(TEXT("location"), Location))
     {
         return false;
     }
 
     const OpenAI::QueryPairs QueryArgs{{"access_key", API_KEY}, {"query", Location}, {"units", Units}};
     WeatherRequestURL = UOpenAIFuncLib::MakeURLWithQuery(Weather::API_URL, QueryArgs);
-    UE_LOG(LogWeatherService, Display, TEXT("Weather reqest URL: %s"), *WeatherRequestURL);
+    UE_LOGFMT(LogWeatherService, Display, "Weather reqest URL: {0}", WeatherRequestURL);
     return true;
 }
 
 void UWeatherService::OnRequestCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
 {
-    if (!Response)
+    if (!Response.IsValid())
     {
         ServiceDataError.Broadcast("Response was null");
         return;
     }
-    UE_LOG(LogWeatherService, Display, TEXT("%s"), *Response->GetContentAsString());
+    UE_LOGFMT(LogWeatherService, Display, "{0}", Response->GetContentAsString());
 
     TSharedPtr<FJsonObject> JsonObject;
-    if (!UOpenAIFuncLib::StringToJson(Response->GetContentAsString(), JsonObject))
+    if (!UJsonFuncLib::StringToJson(Response->GetContentAsString(), JsonObject))
     {
         SendError("Can't parse response");
         return;
     }
 
     bool IsSuccess{true};
-    if (JsonObject->TryGetBoolField("success", IsSuccess) && !IsSuccess)
+    if (JsonObject->TryGetBoolField(TEXT("success"), IsSuccess) && !IsSuccess)
     {
         SendError("Service can't provide requested weather");
         return;
     }
 
     FWeather Weather;
-    if (!UOpenAIFuncLib::ParseJSONToStruct<FWeather>(Response->GetContentAsString(), &Weather))
+    if (!UJsonFuncLib::ParseJSONToStruct<FWeather>(Response->GetContentAsString(), &Weather))
     {
         SendError("Can't parse weather response");
         return;
@@ -169,6 +170,6 @@ void UWeatherService::OnRequestCompleted(FHttpRequestPtr Request, FHttpResponseP
 
 void UWeatherService::SendError(const FString& ErrorMessage)
 {
-    UE_LOG(LogWeatherService, Error, TEXT("%s"), *ErrorMessage);
+    UE_LOGFMT(LogWeatherService, Error, "{0}", ErrorMessage);
     ServiceDataError.Broadcast(ErrorMessage);
 }

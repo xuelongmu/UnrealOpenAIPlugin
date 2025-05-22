@@ -4,8 +4,9 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Info.h"
-#include "Provider/CommonTypes.h"
-#include "FuncLib/ModelTypes.h"
+#include "Provider/Types/CommonTypes.h"
+#include "Provider/Types/ModelTypes.h"
+#include "Provider/Types/Chat/ChatCompletionChunkTypes.h"
 #include "ChatGPTWorld.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGPTRequestUpdated, const FMessage&, Message);
@@ -13,7 +14,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGPTRequestCompleted, const FMessa
 
 class UChatGPT;
 
-UCLASS()
+UCLASS(Blueprintable, BlueprintType)
 class OPENAI_API AChatGPTWorld : public AInfo
 {
     GENERATED_BODY()
@@ -22,13 +23,16 @@ protected:
     virtual void BeginPlay() override;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "OpenAI")
-    EMainModelEnum Model{EMainModelEnum::GPT_4_Vision_Preview};
+    EMainModelEnum Model{EMainModelEnum::O1};
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "OpenAI")
     int32 MaxTokens{2000};
 
     UFUNCTION(BlueprintCallable, Category = "OpenAI")
     void SetAuth(const FOpenAIAuth& OpenAIAuth);
+
+    UFUNCTION(BlueprintCallable, Category = "OpenAI")
+    void SetModel(const FString& ModelName);
 
     UFUNCTION(BlueprintCallable, Category = "OpenAI")
     bool IsInProgress() const { return bIsInProgress; }

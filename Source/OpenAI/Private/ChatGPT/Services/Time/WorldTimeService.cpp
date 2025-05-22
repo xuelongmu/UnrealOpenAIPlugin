@@ -1,7 +1,8 @@
 // OpenAI ServiceSample, Copyright LifeEXE. All Rights Reserved.
 
 #include "ChatGPT/Services/Time/WorldTimeService.h"
-#include "Funclib/OpenAIFuncLib.h"
+#include "Funclib/JsonFuncLib.h"
+#include "Logging/StructuredLog.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWorldTimeService, All, All);
 
@@ -57,7 +58,7 @@ FString UWorldTimeService::MakeFunction() const
     TArray<TSharedPtr<FJsonValue>> RequiredArray;
     ParamsObj->SetArrayField("required", RequiredArray);
 
-    return UOpenAIFuncLib::MakeFunctionsString(ParamsObj);
+    return UJsonFuncLib::MakeFunctionsString(ParamsObj);
 }
 
 void UWorldTimeService::Call(const TSharedPtr<FJsonObject>& Args, const FString& ToolIDIn)
@@ -65,10 +66,10 @@ void UWorldTimeService::Call(const TSharedPtr<FJsonObject>& Args, const FString&
     Super::Call(Args, ToolIDIn);
 
     FString Location{};
-    Args->TryGetStringField("location", Location);
+    Args->TryGetStringField(TEXT("location"), Location);
 
     const FString URL = Location.IsEmpty() ? WorldTime::IP_URL : WorldTime::TIMEZONE_URL + Location;
-    UE_LOG(LogWorldTimeService, Display, TEXT("URL: %s"), *URL);
+    UE_LOGFMT(LogWorldTimeService, Display, "URL: {0}", URL);
 
     auto HttpRequest = FHttpModule::Get().CreateRequest();
     HttpRequest->SetHeader("Content-Type", "application/json");
@@ -80,23 +81,23 @@ void UWorldTimeService::Call(const TSharedPtr<FJsonObject>& Args, const FString&
 
 void UWorldTimeService::OnRequestCompleted(FHttpRequestPtr Request, FHttpResponsePtr Response, bool WasSuccessful)
 {
-    if (!Response)
+    if (!Response.IsValid())
     {
         ServiceDataError.Broadcast("Response was null");
         return;
     }
 
     FWorldTime WorldTime;
-    if (!UOpenAIFuncLib::ParseJSONToStruct<FWorldTime>(Response->GetContentAsString(), &WorldTime))
+    if (!UJsonFuncLib::ParseJSONToStruct<FWorldTime>(Response->GetContentAsString(), &WorldTime))
     {
         const FString ErroStr = FString::Format(TEXT("Can't parse JSON: {0}"), {Response->GetContentAsString()});
-        UE_LOG(LogWorldTimeService, Display, TEXT("%s"), *ErroStr);
+        UE_LOGFMT(LogWorldTimeService, Display, "{0}", ErroStr);
         ServiceDataError.Broadcast(ErroStr);
         return;
     }
 
     const FString InfoToOpenAI = FString::Format(TEXT("DateTime: {0}, Timezone: {1}"), {WorldTime.DateTime, WorldTime.TimeZone});
-    UE_LOG(LogWorldTimeService, Display, TEXT("InfoToOpenAI: %s"), *InfoToOpenAI);
+    UE_LOGFMT(LogWorldTimeService, Display, "InfoToOpenAI: {0}", InfoToOpenAI);
 
     ServiceDataReceived.Broadcast(MakeMessage(InfoToOpenAI));
 }

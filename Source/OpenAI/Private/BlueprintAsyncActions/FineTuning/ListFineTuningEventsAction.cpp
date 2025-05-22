@@ -7,29 +7,31 @@
 UListFineTuningEventsAction* UListFineTuningEventsAction::ListFineTuningEvents(
     const FString& FineTuningID, const FOpenAIAuth& Auth, const FString& URLOverride)
 {
-    auto* CompletionAction = NewObject<UListFineTuningEventsAction>();
-    CompletionAction->FineTuningID = FineTuningID;
-    CompletionAction->Auth = Auth;
-    return CompletionAction;
+    auto* ListFineTuningEventsAction = NewObject<UListFineTuningEventsAction>();
+    ListFineTuningEventsAction->FineTuningID = FineTuningID;
+    ListFineTuningEventsAction->Auth = Auth;
+    ListFineTuningEventsAction->URLOverride = URLOverride;
+    return ListFineTuningEventsAction;
 }
 
 void UListFineTuningEventsAction::Activate()
 {
     auto* Provider = NewObject<UOpenAIProvider>();
-    Provider->OnListFineTuneEventsCompleted().AddUObject(this, &ThisClass::OnListFineTuningEventsCompleted);
+    Provider->OnListFineTuningEventsCompleted().AddUObject(this, &ThisClass::OnListFineTuningEventsCompleted);
     Provider->OnRequestError().AddUObject(this, &ThisClass::OnRequestError);
     TryToOverrideURL(Provider);
     Provider->ListFineTuningEvents(FineTuningID, Auth);
 }
 
-void UListFineTuningEventsAction::OnListFineTuningEventsCompleted(const FFineTuneEventsResponse& Response)
+void UListFineTuningEventsAction::OnListFineTuningEventsCompleted(
+    const FListFineTuningEventsResponse& Response, const FOpenAIResponseMetadata& ResponseMetadata)
 {
-    OnCompleted.Broadcast(Response, {});
+    OnCompleted.Broadcast(Response, ResponseMetadata, {});
 }
 
 void UListFineTuningEventsAction::OnRequestError(const FString& URL, const FString& Content)
 {
-    OnCompleted.Broadcast({}, FOpenAIError{Content, true});
+    OnCompleted.Broadcast({}, {}, FOpenAIError{Content, true});
 }
 
 void UListFineTuningEventsAction::TryToOverrideURL(UOpenAIProvider* Provider)

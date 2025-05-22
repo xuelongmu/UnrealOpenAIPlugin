@@ -3,12 +3,12 @@
 #pragma once
 
 #include "Kismet/BlueprintAsyncActionBase.h"
-#include "Provider/ResponseTypes.h"
-#include "Provider/RequestTypes.h"
+#include "Provider/Types/FineTuneTypes.h"
+#include "Provider/Types/CommonTypes.h"
 #include "ListFineTuningEventsAction.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
-    FOnListFineTuningEvents, const FFineTuneEventsResponse&, Response, const FOpenAIError&, RawError);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnListFineTuningEvents, const FListFineTuningEventsResponse&, Response,
+    const FOpenAIResponseMetadata&, ResponseMetadata, const FOpenAIError&, RawError);
 
 class UOpenAIProvider;
 
@@ -34,7 +34,7 @@ private:
 
     void TryToOverrideURL(UOpenAIProvider* Provider);
 
-    void OnListFineTuningEventsCompleted(const FFineTuneEventsResponse& Response);
+    void OnListFineTuningEventsCompleted(const FListFineTuningEventsResponse& Response, const FOpenAIResponseMetadata& ResponseMetadata);
     void OnRequestError(const FString& URL, const FString& Content);
 
 private:

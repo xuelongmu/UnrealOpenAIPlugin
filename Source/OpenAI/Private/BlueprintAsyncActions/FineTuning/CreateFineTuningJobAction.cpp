@@ -7,10 +7,11 @@
 UCreateFineTuningJobAction* UCreateFineTuningJobAction::CreateFineTuningJob(
     const FFineTuningJob& FineTuningJob, const FOpenAIAuth& Auth, const FString& URLOverride)
 {
-    auto* CompletionAction = NewObject<UCreateFineTuningJobAction>();
-    CompletionAction->FineTuningJob = FineTuningJob;
-    CompletionAction->Auth = Auth;
-    return CompletionAction;
+    auto* CreateFineTuningJobAction = NewObject<UCreateFineTuningJobAction>();
+    CreateFineTuningJobAction->FineTuningJob = FineTuningJob;
+    CreateFineTuningJobAction->Auth = Auth;
+    CreateFineTuningJobAction->URLOverride = URLOverride;
+    return CreateFineTuningJobAction;
 }
 
 void UCreateFineTuningJobAction::Activate()
@@ -22,14 +23,15 @@ void UCreateFineTuningJobAction::Activate()
     Provider->CreateFineTuningJob(FineTuningJob, Auth);
 }
 
-void UCreateFineTuningJobAction::OnCreateFineTuningJobCompleted(const FFineTuningJobObjectResponse& Response)
+void UCreateFineTuningJobAction::OnCreateFineTuningJobCompleted(
+    const FFineTuningJobObjectResponse& Response, const FOpenAIResponseMetadata& ResponseMetadata)
 {
-    OnCompleted.Broadcast(Response, {});
+    OnCompleted.Broadcast(Response, ResponseMetadata, {});
 }
 
 void UCreateFineTuningJobAction::OnRequestError(const FString& URL, const FString& Content)
 {
-    OnCompleted.Broadcast({}, FOpenAIError{Content, true});
+    OnCompleted.Broadcast({}, {}, FOpenAIError{Content, true});
 }
 
 void UCreateFineTuningJobAction::TryToOverrideURL(UOpenAIProvider* Provider)

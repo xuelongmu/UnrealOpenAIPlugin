@@ -4,17 +4,19 @@
 #include "Provider/OpenAIProvider.h"
 #include "API/API.h"
 #include "Misc/FileHelper.h"
+#include "Logging/StructuredLog.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogSpeechAction, All, All);
 
 USpeechAction* USpeechAction::CreateSpeech(
     const FSpeech& Speech, const FOpenAIAuth& Auth, const FString& URLOverride, const FSpeechSettings& Settings)
 {
-    auto* AudioTranslationAction = NewObject<USpeechAction>();
-    AudioTranslationAction->Speech = Speech;
-    AudioTranslationAction->Auth = Auth;
-    AudioTranslationAction->Settings = Settings;
-    return AudioTranslationAction;
+    auto* SpeechAction = NewObject<USpeechAction>();
+    SpeechAction->Speech = Speech;
+    SpeechAction->Auth = Auth;
+    SpeechAction->Settings = Settings;
+    SpeechAction->URLOverride = URLOverride;
+    return SpeechAction;
 }
 
 void USpeechAction::Activate()
@@ -25,7 +27,7 @@ void USpeechAction::Activate()
     Provider->CreateSpeech(Speech, Auth);
 }
 
-void USpeechAction::OnCreateSpeechCompleted(const FSpeechResponse& Response)
+void USpeechAction::OnCreateSpeechCompleted(const FSpeechResponse& Response, const FOpenAIResponseMetadata& ResponseMetadata)
 {
     FString FilePath{};
     if (Settings.SaveToFile && !Settings.AbsolutePath.IsEmpty() && !Settings.BaseName.IsEmpty())
@@ -42,15 +44,15 @@ void USpeechAction::OnCreateSpeechCompleted(const FSpeechResponse& Response)
 
         if (FFileHelper::SaveArrayToFile(Response.Bytes, *FilePath))
         {
-            UE_LOG(LogSpeechAction, Display, TEXT("File was successfully saved to: %s"), *FilePath);
+            UE_LOGFMT(LogSpeechAction, Display, "File was successfully saved to: {0}", FilePath);
         }
     }
-    OnCompleted.Broadcast(FSpeechPayload{Response, FilePath}, {});
+    OnCompleted.Broadcast(FSpeechPayload{Response, FilePath}, ResponseMetadata, {});
 }
 
 void USpeechAction::OnRequestError(const FString& URL, const FString& Content)
 {
-    OnCompleted.Broadcast({}, FOpenAIError{Content, true});
+    OnCompleted.Broadcast({}, {}, FOpenAIError{Content, true});
 }
 
 void USpeechAction::TryToOverrideURL()

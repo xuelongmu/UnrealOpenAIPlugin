@@ -4,7 +4,9 @@
 #include "Provider/OpenAIProvider.h"
 #include "Algo/ForEach.h"
 #include "FuncLib/OpenAIFuncLib.h"
+#include "FuncLib/JsonFuncLib.h"
 #include "ChatGPT/BaseService.h"
+#include "Logging/StructuredLog.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogChatGPT, All, All);
 
@@ -50,12 +52,13 @@ UChatGPT::UChatGPT()
             HandleError(Content);
             HandleRequestCompletion();
         });
-    Provider->OnCreateChatCompletionStreamProgresses().AddLambda([&](const TArray<FChatCompletionStreamResponse>& Responses) {  //
-        const FString GatherdChunk = GatherChunkResponse(Responses);
-        UpdateAssistantMessage(GatherdChunk);
-    });
+    Provider->OnCreateChatCompletionStreamProgresses().AddLambda(
+        [&](const TArray<FChatCompletionStreamResponse>& Responses, const FOpenAIResponseMetadata& ResponseMetadata) {  //
+            const FString GatherdChunk = GatherChunkResponse(Responses);
+            UpdateAssistantMessage(GatherdChunk);
+        });
     Provider->OnCreateChatCompletionStreamCompleted().AddLambda(
-        [&](const TArray<FChatCompletionStreamResponse>& Responses)  //
+        [&](const TArray<FChatCompletionStreamResponse>& Responses, const FOpenAIResponseMetadata& ResponseMetadata)  //
         {
             FFunctionCommon FunctionCall{};
             FString ID;
@@ -94,7 +97,7 @@ void UChatGPT::MakeRequest()
     FChatCompletion ChatCompletion;
     ChatCompletion.Model = OpenAIModel;
     ChatCompletion.Messages = ChatHistory;
-    ChatCompletion.Max_Tokens = MaxTokens;
+    ChatCompletion.Max_Completion_Tokens.Set(MaxCompletionTokens);
     ChatCompletion.Stream = true;
     ChatCompletion.Tools = AvailableTools;
     Provider->CreateChatCompletion(ChatCompletion, Auth);
@@ -135,15 +138,15 @@ bool UChatGPT::HandleFunctionCall(const FFunctionCommon& FunctionCall, const FSt
     FString LogMsg;
 
     TSharedPtr<FJsonObject> Args;
-    if (!FunctionCall.Arguments.IsEmpty() && !UOpenAIFuncLib::StringToJson(FunctionCall.Arguments, Args))
+    if (!FunctionCall.Arguments.IsEmpty() && !UJsonFuncLib::StringToJson(FunctionCall.Arguments, Args))
     {
         LogMsg = FString::Format(TEXT("Can't parse args: {0}"), {FunctionCall.Arguments});
-        UE_LOG(LogChatGPT, Error, TEXT("%s"), *LogMsg);
+        UE_LOGFMT(LogChatGPT, Error, "{0}", LogMsg);
         return false;
     }
 
     LogMsg = FString::Format(TEXT("OpenAI call the function: [{0}] with args: {1}"), {FunctionCall.Name, FunctionCall.Arguments});
-    UE_LOG(LogChatGPT, Display, TEXT("%s"), *LogMsg);
+    UE_LOGFMT(LogChatGPT, Display, "{0}", LogMsg);
 
     FMessage HistoryMessage;
     HistoryMessage.Role = UOpenAIFuncLib::OpenAIRoleToString(ERole::Assistant);
@@ -166,7 +169,7 @@ bool UChatGPT::HandleFunctionCall(const FFunctionCommon& FunctionCall, const FSt
     }
 
     LogMsg = FString::Format(TEXT("Can't find function by name: [{0}]"), {FunctionCall.Name});
-    UE_LOG(LogChatGPT, Error, TEXT("%s"), *LogMsg);
+    UE_LOGFMT(LogChatGPT, Error, "{0}", LogMsg);
     return false;
 }
 
@@ -180,7 +183,7 @@ bool UChatGPT::RegisterService(const TSubclassOf<UBaseService>& ServiceClass, co
     {
         LogMsg = FString::Format(
             TEXT("Service {0} can't be init. API keys have probably not been loaded. Its functions are not available."), {Service->Name()});
-        UE_LOG(LogChatGPT, Error, TEXT("%s"), *LogMsg);
+        UE_LOGFMT(LogChatGPT, Error, "{0}", LogMsg);
         return false;
     }
     Service->OnServiceDataReceived().AddLambda(
@@ -198,7 +201,7 @@ bool UChatGPT::RegisterService(const TSubclassOf<UBaseService>& ServiceClass, co
     Services.Add(Service);
 
     LogMsg = FString::Format(TEXT("Service {0} was registered"), {Service->Name()});
-    UE_LOG(LogChatGPT, Display, TEXT("%s"), *LogMsg);
+    UE_LOGFMT(LogChatGPT, Display, "{0}", LogMsg);
     return true;
 }
 
@@ -211,11 +214,11 @@ void UChatGPT::UnRegisterService(const TSubclassOf<UBaseService>& ServiceClass)
         FoundService->Get()->OnServiceDataError().RemoveAll(this);
         Services.Remove(FoundService->Get());
         const auto LogMsg = FString::Format(TEXT("Service {0} was unregistered"), {FoundService->Get()->Name()});
-        UE_LOG(LogChatGPT, Display, TEXT("%s"), *LogMsg);
+        UE_LOGFMT(LogChatGPT, Display, "{0}", LogMsg);
     }
     else
     {
-        UE_LOG(LogChatGPT, Warning, TEXT("Can't unregister service"));
+        UE_LOGFMT(LogChatGPT, Warning, "Can't unregister service");
     }
 }
 
@@ -236,7 +239,7 @@ FString UChatGPT::GetModel() const
 
 void UChatGPT::SetMaxTokens(int32 Tokens)
 {
-    MaxTokens = Tokens;
+    MaxCompletionTokens = Tokens;
 }
 
 void UChatGPT::AddMessage(const FMessage& Message)

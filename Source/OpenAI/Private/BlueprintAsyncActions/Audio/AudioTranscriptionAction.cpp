@@ -10,6 +10,7 @@ UAudioTranscriptionAction* UAudioTranscriptionAction::CreateAudioTranscription(
     auto* AudioTranscriptionAction = NewObject<UAudioTranscriptionAction>();
     AudioTranscriptionAction->AudioTranscription = AudioTranscription;
     AudioTranscriptionAction->Auth = Auth;
+    AudioTranscriptionAction->URLOverride = URLOverride;
     return AudioTranscriptionAction;
 }
 
@@ -21,14 +22,15 @@ void UAudioTranscriptionAction::Activate()
     Provider->CreateAudioTranscription(AudioTranscription, Auth);
 }
 
-void UAudioTranscriptionAction::OnCreateAudioTranscriptionCompleted(const FAudioTranscriptionResponse& Response)
+void UAudioTranscriptionAction::OnCreateAudioTranscriptionCompleted(
+    const FAudioTranscriptionResponse& Response, const FOpenAIResponseMetadata& ResponseMetadata)
 {
-    OnCompleted.Broadcast(Response, {});
+    OnCompleted.Broadcast(Response, ResponseMetadata, {});
 }
 
 void UAudioTranscriptionAction::OnRequestError(const FString& URL, const FString& Content)
 {
-    OnCompleted.Broadcast({}, FOpenAIError{Content, true});
+    OnCompleted.Broadcast({}, {}, FOpenAIError{Content, true});
 }
 
 void UAudioTranscriptionAction::TryToOverrideURL()

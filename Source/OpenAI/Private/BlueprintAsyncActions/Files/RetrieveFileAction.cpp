@@ -9,6 +9,7 @@ URetrieveFileAction* URetrieveFileAction::RetrieveFile(const FString& FileID, co
     auto* RetrieveFileAction = NewObject<URetrieveFileAction>();
     RetrieveFileAction->FileID = FileID;
     RetrieveFileAction->Auth = Auth;
+    RetrieveFileAction->URLOverride = URLOverride;
     return RetrieveFileAction;
 }
 
@@ -21,14 +22,14 @@ void URetrieveFileAction::Activate()
     Provider->RetrieveFile(FileID, Auth);
 }
 
-void URetrieveFileAction::OnRetrieveFileCompleted(const FRetrieveFileResponse& Response)
+void URetrieveFileAction::OnRetrieveFileCompleted(const FRetrieveFileResponse& Response, const FOpenAIResponseMetadata& ResponseMetadata)
 {
-    OnCompleted.Broadcast(Response, {});
+    OnCompleted.Broadcast(Response, ResponseMetadata, {});
 }
 
 void URetrieveFileAction::OnRequestError(const FString& URL, const FString& Content)
 {
-    OnCompleted.Broadcast({}, FOpenAIError{Content, true});
+    OnCompleted.Broadcast({}, {}, FOpenAIError{Content, true});
 }
 
 void URetrieveFileAction::TryToOverrideURL(UOpenAIProvider* Provider)

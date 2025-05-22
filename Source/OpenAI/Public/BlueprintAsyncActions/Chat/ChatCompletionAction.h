@@ -3,9 +3,9 @@
 #pragma once
 
 #include "Kismet/BlueprintAsyncActionBase.h"
-#include "Provider/ResponseTypes.h"
-#include "Provider/RequestTypes.h"
-#include "Provider/CommonTypes.h"
+#include "Provider/Types/Chat/ChatCompletionTypes.h"
+#include "Provider/Types/Chat/ChatCompletionChunkTypes.h"
+#include "Provider/Types/CommonTypes.h"
 #include "ChatCompletionAction.generated.h"
 
 USTRUCT(BlueprintType)
@@ -32,7 +32,8 @@ struct FChatCompletionPayload
     bool bCompleted{};
 };
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnChatCompletion, const FChatCompletionPayload&, Payload, const FOpenAIError&, RawError);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnChatCompletion, const FChatCompletionPayload&, Payload, const FOpenAIResponseMetadata&,
+    ResponseMetadata, const FOpenAIError&, RawError);
 
 class UOpenAIProvider;
 
@@ -58,9 +59,11 @@ private:
 
     void TryToOverrideURL(UOpenAIProvider* Provider);
 
-    void OnCreateChatCompletionCompleted(const FChatCompletionResponse& Response);
-    void OnCreateChatCompletionStreamProgresses(const TArray<FChatCompletionStreamResponse>& Responses);
-    void OnCreateChatCompletionStreamCompleted(const TArray<FChatCompletionStreamResponse>& Responses);
+    void OnCreateChatCompletionCompleted(const FChatCompletionResponse& Response, const FOpenAIResponseMetadata& ResponseMetadata);
+    void OnCreateChatCompletionStreamProgresses(
+        const TArray<FChatCompletionStreamResponse>& Responses, const FOpenAIResponseMetadata& ResponseMetadata);
+    void OnCreateChatCompletionStreamCompleted(
+        const TArray<FChatCompletionStreamResponse>& Responses, const FOpenAIResponseMetadata& ResponseMetadata);
     void OnRequestError(const FString& URL, const FString& Content);
 
 private:

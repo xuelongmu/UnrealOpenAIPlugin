@@ -4,8 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "EditorUtilityWidget.h"
-#include "Provider/CommonTypes.h"
-#include "FuncLib/ModelTypes.h"
+#include "Provider/Types/Chat/ChatCompletionChunkTypes.h"
+#include "Provider/Types/ModelTypes.h"
 #include "ChatMessageWidget.generated.h"
 
 class UBorder;

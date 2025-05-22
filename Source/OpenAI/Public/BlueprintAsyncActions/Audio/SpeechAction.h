@@ -4,6 +4,7 @@
 
 #include "Kismet/BlueprintAsyncActionBase.h"
 #include "Provider/Types/AudioTypes.h"
+#include "Provider/Types/CommonTypes.h"
 #include "Misc/Paths.h"
 #include "SpeechAction.generated.h"
 
@@ -37,7 +38,8 @@ struct FSpeechSettings
     bool SaveToFile{true};
 };
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSpeech, const FSpeechPayload&, Response, const FOpenAIError&, RawError);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
+    FOnSpeech, const FSpeechPayload&, Response, const FOpenAIResponseMetadata&, ResponseMetadata, const FOpenAIError&, RawError);
 
 class UOpenAIProvider;
 
@@ -63,7 +65,7 @@ private:
 
     void TryToOverrideURL();
 
-    void OnCreateSpeechCompleted(const FSpeechResponse& Response);
+    void OnCreateSpeechCompleted(const FSpeechResponse& Response, const FOpenAIResponseMetadata& ResponseMetadata);
     void OnRequestError(const FString& URL, const FString& Content);
 
 private:
