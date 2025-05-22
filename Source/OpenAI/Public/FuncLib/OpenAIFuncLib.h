@@ -165,6 +165,7 @@ public:
 
     // API
     /**
+      File content consits of two lines:
       APIKey=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
       OrganizationID=org-xxxxxxxxxxxxxxxxxxxxxx
       ProjectID=proj_xxxxxxxxxxxxxxxxxxxxxx
@@ -176,7 +177,6 @@ public:
     static FOpenAIAuth LoadAPITokensFromFileOnce(const FString& FilePath);
 
     // misc helpers
-      File content consists of two lines:
     static FString BoolToString(bool Value);
     static FString RemoveWhiteSpaces(const FString& Input);
     static OpenAI::ServiceSecrets LoadServiceSecretsFromFile(const FString& FilePath);
